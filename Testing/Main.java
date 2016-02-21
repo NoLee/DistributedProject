@@ -12,7 +12,6 @@ public class Main {
 
 	public static void main(String args[]) throws IOException, NoSuchAlgorithmException 
 	{     
-				System.out.println("sup\n"+"how\n"+"are\n"+"you\n");
 				ArrayList<Pair<String, Integer>> myList = new ArrayList<Pair<String, Integer>>();
 				Pair<String, Integer> test1= new Pair<String, Integer>("wet",1);
 				Pair<String, Integer> test2= new Pair<String, Integer>("notwet",2);
