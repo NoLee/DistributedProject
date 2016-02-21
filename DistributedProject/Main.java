@@ -6,16 +6,14 @@ import java.util.*;
 	
 public class Main {
 	
-	//public ArrayList<Integer> socketList;
 	public int socketNum;
 	public int leaderSocket;
-	private ArrayList<Triple<Process, Integer,Integer>> proc;
+	private ArrayList<Triple<Process, Integer,Integer>> proc; //list with the PID,ID,Socket for each process
 	
 	public Main(int startsocket)
 	{
 		socketNum=startsocket;
 		leaderSocket=startsocket+1;
-		//socketList= new ArrayList<Integer>();
 		proc= new ArrayList<Triple<Process, Integer,Integer>>();
 	}
 		
@@ -25,12 +23,14 @@ public class Main {
 		ProcessBuilder pb = new ProcessBuilder("java.exe","-cp","bin","DistributedProject.Node",""+network.leaderSocket,"1",""+network.socketNum,""+network.leaderSocket);
 		pb.inheritIO(); 		// inherit IO to see the output of other programs 
 	    Process p = pb.start();
-	    network.proc.add(new Triple<Process, Integer,Integer>(p,1,network.leaderSocket));
-	    //network.socketList.add(new Integer(network.leaderSocket));
-	    for(int i=2; i<11; i++)
+	    network.proc.add(new Triple<Process,Integer,Integer>(p,1,network.leaderSocket));
+
+	    //create the network with 10 nodes
+	    for(int i=2; i<=10; i++)
 	    {
 	    	network.join(i);	
 	    }
+	    //waits for user input via keyboard
 	    network.listen();			
 	}
 
@@ -42,10 +42,54 @@ public class Main {
         		String fromUser = stdIn.readLine();
         		if (fromUser != null) 
         		{
-        			String[] parts =fromUser.split(" "); 
+        			String[] parts =fromUser.split(","); 
         			new UserClientThread(parts, this).start();
         		}
         	}   
+	}
+	
+	private void waitResponse() throws IOException
+	{
+		ServerSocket serverSocket = new ServerSocket(this.socketNum);
+	    Socket clientSocket = serverSocket.accept();
+	    PrintWriter out = new PrintWriter(clientSocket.getOutputStream(), true);
+	    BufferedReader in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+		String confirmation;
+		while ((confirmation = in.readLine()) != null) 
+		{
+			String[] parts =confirmation.split(","); 
+            if (parts[0].equals("donequery"))
+            {
+	           	 parts[1]=parts[1].replaceAll("\\\\", "\n");
+	           	 System.out.println(parts[1].substring(1));
+	           	 break;
+            }
+            else if (parts[0].equals("donejoin"))
+            {
+            	break;
+            }
+            else if (parts[0].equals("doneinsert"))
+            {
+            	break;
+            }
+            else if (parts[0].equals("donedelete"))
+            {
+            	break;
+            }
+            else if (parts[0].equals("donedepart"))
+            {
+            	break;
+            }
+            else if (parts[0].equals("doneprint"))
+            {
+            	System.out.println(parts[1]);
+            	break;
+            }
+            else 
+            	break;
+		}
+		out.println("OK");
+		serverSocket.close();
 	}
 	
 	public void print() throws UnknownHostException, IOException 
@@ -54,43 +98,46 @@ public class Main {
         PrintWriter out = new PrintWriter(kkSocket.getOutputStream(), true);
 		BufferedReader in = new BufferedReader(new InputStreamReader(kkSocket.getInputStream()));
 		
-		String net;
-		out.println("Print List:");
-		while ((net = in.readLine()) != null) 
-		{
-			 String[] parts =net.split(" "); 
-             if (parts[0].equals("DonePrint"))
-             {
-            	 System.out.println(parts[1]);
-            	 break;
-             }
-         }
-		kkSocket.close();		
+		String confirm;
+		out.println("print,List:");
+		while ((confirm = in.readLine()) != null) 
+	    {
+			//request received from node
+	    	if (confirm.equals("OK"))
+            {
+                break;
+            }
+        }
+		kkSocket.close();
+		
+		this.waitResponse();	
 	}
 	
 	public void join(int id) throws NoSuchAlgorithmException, IOException
 	{
 		int nodeSocket = id+this.socketNum;
-		ProcessBuilder pb = new ProcessBuilder("java.exe","-cp","bin","DistributedProject.Node", ""+nodeSocket ,""+id,"0",""+this.leaderSocket);
+		ProcessBuilder pb = new ProcessBuilder("java.exe","-cp","bin","DistributedProject.Node", ""+nodeSocket ,""+id,""+this.socketNum,""+this.leaderSocket);
 		pb.inheritIO();
         Process p = pb.start();
         this.proc.add(new Triple<Process, Integer,Integer>(p,id,nodeSocket));
-        //this.socketList.add(new Integer(id+this.socketNum));
+        
         Socket kkSocket = new Socket("localhost", this.leaderSocket);
         PrintWriter out = new PrintWriter(kkSocket.getOutputStream(), true);
-		BufferedReader in = new BufferedReader(new InputStreamReader(kkSocket.getInputStream()));
-		
-		String confirmation;
-		out.println("Join "+ id + " " + nodeSocket);
-		while ((confirmation = in.readLine()) != null) 
-		    {
-             if (confirmation.equals("DoneJoin"))
-             {
-            	 //System.out.println("Ok thanks, smell ya later!");
-            	 break;
-             }
-         }
+        BufferedReader in = new BufferedReader(new InputStreamReader(kkSocket.getInputStream()));
+        String confirm;
+        out.println("join,"+ id + "," + nodeSocket);
+        
+		while ((confirm = in.readLine()) != null) 
+	    {
+			//request received from node
+	    	if (confirm.equals("OK"))
+            {
+                break;
+            }
+        }
 		kkSocket.close();
+		
+		this.waitResponse();
 	}
 	
 	public void depart(int id) throws NoSuchAlgorithmException, IOException
@@ -112,18 +159,22 @@ public class Main {
 			//connect and remove the node from the network (update keyranges and prev/next fields)
 			Socket kkSocket = new Socket("localhost", this.leaderSocket);
 	        PrintWriter out = new PrintWriter(kkSocket.getOutputStream(), true);
+
+			out.println("depart,"+ id);
 			BufferedReader in = new BufferedReader(new InputStreamReader(kkSocket.getInputStream()));
-			
-			String confirmation;
-			out.println("Depart "+ id);
-			while ((confirmation = in.readLine()) != null) 
-			{
-	             if (confirmation.equals("DoneDepart"))
-	             {
-	            	 break;
-	             }
-	         }
+			String confirm;
+			while ((confirm = in.readLine()) != null) 
+		    {
+				//request received from node
+		    	if (confirm.equals("OK"))
+	            {
+	                break;
+	            }
+	        }
 			kkSocket.close();
+
+			
+			this.waitResponse();
 			//kill it and remove it from array proc
 			obj.getPid().destroy();
 			this.proc.remove(obj);
@@ -137,19 +188,22 @@ public class Main {
 		int socket= this.proc.get(index).getSocket();
 		Socket kkSocket = new Socket("localhost", socket);
         PrintWriter out = new PrintWriter(kkSocket.getOutputStream(), true);
-		BufferedReader in = new BufferedReader(new InputStreamReader(kkSocket.getInputStream()));
+		out.println("insert,"+ key + ","+ value +","+socket +"," +"Main");
 		
-		String confirmation;
-		out.println("Insert "+ key + " "+ value);
-		while ((confirmation = in.readLine()) != null) 
-		{
-             if (confirmation.equals("DoneInsert"))
-             {
-            	 break;
-             }
-         }
+		BufferedReader in = new BufferedReader(new InputStreamReader(kkSocket.getInputStream()));
+		String confirm;
+		while ((confirm = in.readLine()) != null) 
+	    {
+	    	//request received from node
+	    	if (confirm.equals("OK"))
+            {
+                break;
+            }
+        }
 		kkSocket.close();
+		this.waitResponse();
 	}
+	
 	public void delete(String key) throws UnknownHostException, IOException
 	{
 		Random rand = new Random();
@@ -158,18 +212,21 @@ public class Main {
 		Socket kkSocket = new Socket("localhost", socket);
         PrintWriter out = new PrintWriter(kkSocket.getOutputStream(), true);
 		BufferedReader in = new BufferedReader(new InputStreamReader(kkSocket.getInputStream()));
+		String confirm;
 		
-		String confirmation;
-		out.println("Delete "+ key);
-		while ((confirmation = in.readLine()) != null) 
-		    {
-             if (confirmation.equals("DoneDelete"))
-             {
-            	 //System.out.print("Thanks for deleting: "+ key);
-            	 break;
-             }
-         }
+		out.println("delete,"+ key + "," + socket);	
+
+		while ((confirm = in.readLine()) != null) 
+	    {
+			//request received from node
+	    	if (confirm.equals("OK"))
+            {
+                break;
+            }
+        }
 		kkSocket.close();
+		this.waitResponse();
+
 	}
 	
 	public void query(String key) throws UnknownHostException, IOException
@@ -180,19 +237,20 @@ public class Main {
 		Socket kkSocket = new Socket("localhost", socket);
         PrintWriter out = new PrintWriter(kkSocket.getOutputStream(), true);
 		BufferedReader in = new BufferedReader(new InputStreamReader(kkSocket.getInputStream()));
+		String confirm;
 		
-		String confirmation;
-		out.println("Query "+ key);
-		while ((confirmation = in.readLine()) != null) 
-		    {
-			String[] parts =confirmation.split(","); 
-            if (parts[0].equals("DoneQuery"))
+		out.println("query,"+ key +","+ socket + "," + " ");		
+
+		while ((confirm = in.readLine()) != null) 
+	    {
+			//request received from node
+	    	if (confirm.equals("OK"))
             {
-           	 System.out.println("(Main) "+parts[1]);
-           	 break;
+                break;
             }
-         }
+        }
 		kkSocket.close();
+		this.waitResponse();
 	}
 	
 	public void insertFile(String filename) throws IOException, NoSuchAlgorithmException
@@ -216,10 +274,56 @@ public class Main {
 		}
 		//Close the input stream
 		br.close();
-
 	}
 	
+	public void queryFile(String filename) throws IOException, NoSuchAlgorithmException
+	{
+		//open File
+		FileInputStream fstream = new FileInputStream(filename);
+		BufferedReader br = new BufferedReader(new InputStreamReader(fstream));
 
+		String strLine;
+
+		//Read File Line By Line
+		while ((strLine = br.readLine()) != null)   
+		{
+		  //insert (key,value)
+		  this.query(strLine);
+		}
+		//Close the input stream
+		br.close();
+	}
+	
+	public void parseFile(String filename) throws IOException, NoSuchAlgorithmException
+	{
+		//open File
+		FileInputStream fstream = new FileInputStream(filename);
+		BufferedReader br = new BufferedReader(new InputStreamReader(fstream));
+
+		String strLine;
+
+		//Read File Line By Line
+		while ((strLine = br.readLine()) != null)   
+		{
+		  //1)split the line on ", "
+		  String[] parts= strLine.split(", ");
+		  String request = parts[0];
+		  String key = parts[1];
+		  if (request.equals("query"))
+		  {
+			  this.query(key);
+		  }
+		  else if (request.equals("insert"))
+		  {
+			  int value= Integer.parseInt(parts[2]);
+			  this.insert(key, value);
+		  }
+		}
+		//Close the input stream
+		br.close();
+	}
+	
+	/** Kills all nodes and main*/
 	public void KILL()
 	{
 		Iterator<Triple<Process,Integer,Integer>> myIt= this.proc.iterator();
@@ -228,9 +332,9 @@ public class Main {
 			myIt.next().getPid().destroy();
 	    }
 		this.proc.clear();
+		System.exit(0); // exit main
 	}	
-	
-	
+		
 	//for testing
 	public void printkeyRange() throws IOException
 	{
@@ -243,12 +347,11 @@ public class Main {
 			
 	        System.out.println(this.proc.get(i).getId() + " : ");
 	        out.println("PrintKR");
-			String confirmation;
+			String confirm;
 			
-			while ((confirmation = in.readLine()) != null) 
+			while ((confirm = in.readLine()) != null) 
 			{
-				 String[] parts =confirmation.split(" "); 
-	             if (parts[0].equals("DonePrintKR"))
+	             if (confirm.equals("OK"))
 	             {
 	            	 break;
 	             }
@@ -256,52 +359,9 @@ public class Main {
 			kkSocket.close();		
 	    }
 	}
-	
-	//for testing
-	public void printItems() throws UnknownHostException, IOException
-	{
-	    for(int i=0; i<this.proc.size(); i++)
-	    {
-			Socket kkSocket = new Socket("localhost", this.proc.get(i).getSocket());
-	        PrintWriter out = new PrintWriter(kkSocket.getOutputStream(), true);
-			BufferedReader in = new BufferedReader(new InputStreamReader(kkSocket.getInputStream()));	
-			
-	        System.out.println(this.proc.get(i).getId() + " : ");
-			out.println("PrintItems");
-			String confirmation;
-			
-			while ((confirmation = in.readLine()) != null) 
-			{
-				 String[] parts =confirmation.split(" "); 
-	             if (parts[0].equals("DonePrintItems"))
-	             {
-	            	 break;
-	             }
-	         }
-			kkSocket.close();		
-	    }
-	}
-	
-	
 }
 
-
-/*private void sendRequest() throws IOException
-{
-		int portNumber1 = 2016;
-		//int portNumber2 = 2017;
-			//connect to server
-	   Socket kkSocket = new Socket("localhost", portNumber1);
-	   PrintWriter out = new PrintWriter(kkSocket.getOutputStream(), true);
-	   //BufferedReader in = new BufferedReader(new InputStreamReader(kkSocket.getInputStream()));
-	   BufferedReader stdIn =new BufferedReader(new InputStreamReader(System.in));
-	  // String fromServer;
-	   String fromUser;
-	   fromUser = stdIn.readLine();
-	   if (fromUser != null) 
-	   {
-		   System.out.println("Client: " + fromUser);
-		   out.println(fromUser); 
-		   this.listen();
-	   }
-}*/
+/*TODO out.close();
+in.close();
+clientSocket.close();
+serverSocket.close();*/

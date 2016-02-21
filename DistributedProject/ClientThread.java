@@ -3,9 +3,6 @@ package DistributedProject;
 import java.io.*;
 import java.net.*;
 import java.security.NoSuchAlgorithmException;
-import java.util.Iterator;
-
-import Testing.Pair;
 
 public class ClientThread extends Thread
 {
@@ -22,124 +19,144 @@ public class ClientThread extends Thread
 		try {
 			PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
 			BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-		    String inputLine,message;
+		    String inputLine;
 			while ((inputLine = in.readLine()) != null) 
-			{
-				String[] parts =inputLine.split(" "); 
-				if (parts[0].equals("Join"))
+			{				
+				String[] parts1 =inputLine.split(",");
+				if (parts1[0].equals("insert"))
 				{
-					this.ThisNode.join(parts[1],Integer.parseInt(parts[2]));
-					//System.out.println("Done Join "+parts[1]);
-					out.println("DoneJoin");
-					socket.close();
+					//if main started the request, reply immediately to previous node
+					if (parts1[4].compareTo("Main")==0)
+					{
+						out.println("OK");
+					}
+					this.ThisNode.insert(parts1[1],Integer.parseInt(parts1[2]),Integer.parseInt(parts1[3]),parts1[4]);
+
+					//if a node started the request, handle the request and then reply
+					if (parts1[4].compareTo("Node")==0)
+					{
+						out.println("OK");
+					}					
 					break;
 				}
-				else if (parts[0].equals("Depart"))
+				else if (parts1[0].equals("doneinsert"))
 				{
-					this.ThisNode.depart(parts[1]);
-					out.println("DoneDepart");
-					socket.close();
+					out.println("OK");
+					//inform main
+					this.ThisNode.sendRequest(this.ThisNode.mainSocket, "doneinsert" );					
 					break;
 				}
-				else if (parts[0].equals("Update"))
+				else if (parts1[0].equals("query"))
+				{
+					//send ACK
+					out.println("OK");
+					this.ThisNode.query(parts1[1],Integer.parseInt(parts1[2]),parts1[3]);					
+					break;
+				}
+				else if (parts1[0].equals("donequery"))
+				{
+					out.println("OK");
+					//inform main
+					this.ThisNode.sendRequest(this.ThisNode.mainSocket, "donequery," +parts1[1] );					
+					break;
+				}
+				else if (parts1[0].equals("delete"))
+				{
+					out.println("OK");
+					this.ThisNode.delete(parts1[1],Integer.parseInt(parts1[2]));					
+					break;				
+				}				
+				else if (parts1[0].equals("donedelete"))
+				{
+					out.println("OK");
+					//inform main
+					this.ThisNode.sendRequest(this.ThisNode.mainSocket, "donedelete" );					
+					break;
+				}
+				else if (parts1[0].equals("join"))
+				{
+					out.println("OK");
+					this.ThisNode.join(parts1[1],Integer.parseInt(parts1[2]));
+					
+					break;
+				}
+				else if (parts1[0].equals("donejoin"))
+				{
+					out.println("OK");
+					this.ThisNode.sendRequest(this.ThisNode.mainSocket, "donejoin");
+					
+					break;
+				}
+				else if (parts1[0].equals("depart"))
+				{
+					out.println("OK");
+					this.ThisNode.depart(parts1[1]);
+					
+					break;
+				}
+				else if (parts1[0].equals("donedepart"))
+				{
+					out.println("OK");
+					this.ThisNode.sendRequest(this.ThisNode.mainSocket, "donedepart");
+					
+					break;
+				}
+				else if (parts1[0].equals("update"))
 				{					
-					if (!parts[1].equals("NULL"))
+					if (!parts1[1].equals("NULL"))
 					{
-						this.ThisNode.next=Integer.parseInt(parts[1]);
+						this.ThisNode.next=Integer.parseInt(parts1[1]);
 					}
-					if (!parts[2].equals("NULL"))
+					if (!parts1[2].equals("NULL"))
 					{
-						this.ThisNode.previous=Integer.parseInt(parts[2]);
+						this.ThisNode.previous=Integer.parseInt(parts1[2]);
 					}
-					//Debugging print
-					//System.out.println(this.ThisNode.id + "has updated, next= "+ this.ThisNode.next + ", previous= "+ this.ThisNode.previous);
-					out.println("DoneUpdate");
+					out.println("OK");
 					socket.close();
 					break;
 				}
-				else if (parts[0].equals("Print"))
+				else if (parts1[0].equals("ID"))
 				{
-					if (this.ThisNode.next==this.ThisNode.leaderSocket)
-					{
-						//if we reached the first node, start communicating back till main 
-						out.println("DonePrint "+parts[1]+"->"+this.ThisNode.id);
-					}
-					else
-					{
-						message = this.ThisNode.sendRequest(this.ThisNode.next,parts[0]+" "+parts[1]+"->"+this.ThisNode.id);	
-						out.println("DonePrint "+message);
-					}
-					//socket.close();	
+					out.println("ID," + this.ThisNode.id);					
 					break;
 				}
-				else if (parts[0].equals("Insert"))
-				{
-					String[] toConcat = new String[parts.length-2];
-					String fileName;
-					
-					for (int i=1;i<parts.length-1;i++)
-					{
-						toConcat[i-1] = parts[i];
-					}
-					fileName = String.join(" ",toConcat);
-					
-					this.ThisNode.insert(fileName,Integer.parseInt(parts[parts.length-1]));
-					//System.out.println("Done Join "+parts[1]);
-					out.println("DoneInsert");
-					//socket.close();
-					break;
-				}
-				else if (parts[0].equals("Delete")|| parts[0].equals("Query"))
-				{
-					String[] toConcat = new String[parts.length-1];
-					String fileName;
-					
-					for (int i=1;i<parts.length;i++)
-					{
-						toConcat[i-1] = parts[i];
-					}
-					fileName = String.join(" ",toConcat);
-					
-					if (parts[0].equals("Delete"))
-					{
-						this.ThisNode.delete(fileName);
-						out.println("DoneDelete");
-						break;
-					}
-					else
-					{
-						String query_answer=this.ThisNode.query(fileName);
-						out.println("DoneQuery,"+query_answer);
-						break;
-					}
-				}
-				else if (parts[0].equals("ID"))
-				{
-					out.println("ID " + this.ThisNode.id);
-					break;
-				}
-				else if (parts[0].equals("Findkeyrange"))
-				{
+				else if (parts1[0].equals("findkeyrange"))
+				{					
 					this.ThisNode.findkeyRange();
-					out.println("DoneFindkeyrage");
+					out.println("OK");					
 					break;
 				}
-				else if (parts[0].equals("PrintKR"))
+				else if (parts1[0].equals("PrintKR"))
 				{
 					System.out.println(this.ThisNode.keyRange[0] +" "+ this.ThisNode.keyRange[1]);
-					out.println("DonePrintKR");
+					out.println("OK");					
 					break;
 				}
-				else if (parts[0].equals("PrintItems"))
+				if (parts1[0].equals("print"))
 				{
-					this.ThisNode.printItems();
-					out.println("DonePrintItems");
+					out.println("OK");
+					if (this.ThisNode.next==this.ThisNode.leaderSocket)
+					{
+						//if we reached the last node (started from leader node)
+						this.ThisNode.sendRequest(this.ThisNode.next,"doneprint"+","+parts1[1]+"->"+this.ThisNode.id);	//send the full list to the leader
+					}
+					else
+					{
+						//more nodes need to be written on the list
+						this.ThisNode.sendRequest(this.ThisNode.next,"print"+","+parts1[1]+"->"+this.ThisNode.id);	
+					}
 					break;
 				}
-				else
+				if (parts1[0].equals("doneprint"))
+				{
+					this.ThisNode.sendRequest(this.ThisNode.mainSocket,"doneprint"+","+parts1[1]);
+				}
+				else					
 					break;
-			} 
+			}
+			socket.close();			
 		}
+
 		catch (IOException e) 
 		{
 			// TODO Auto-generated catch block

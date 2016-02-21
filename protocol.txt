@@ -1,0 +1,33 @@
+KEYBOARD:
+join,(id)
+depart,(id)
+insert,(file name),(value)
+insertfile,(filename.txt - must be at same directory as "src")
+queryfile,(filename.txt - must be at same directory as "src")
+parsefile,(filename.txt - must be at same directory as "src")
+delete,(file name)
+query,(file name)
+query,*
+PrintKR
+
+MAIN
+join,(id),(socket of this id)
+depart,(id)
+insert,(file name),(value),(socket recieving request),Main
+delete,(file name),(socket recieving request)
+query,(file name),(socket recieving request)
+
+NODES
+join,(id),(socket of this id)
+depart,(id)
+insert,(file name),(value),(socket that started the request),Main || Node
+delete,(file name),(socket that started the request)
+query,(file name),(socket that started the request)
+update,(next),(previous)
+donejoin
+donedepart
+doneinsert
+donedelete
+donequery,(requested file name(s))
+findkeyrange
+ID

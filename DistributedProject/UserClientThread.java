@@ -1,7 +1,6 @@
 package DistributedProject;
 
 import java.io.*;
-import java.net.*;
 import java.security.NoSuchAlgorithmException;
 
 public class UserClientThread extends Thread
@@ -21,15 +20,15 @@ public class UserClientThread extends Thread
 	{
 		try 
 		{
-			if (request[0].equals("Join"))
+			if (request[0].equals("join"))
 			{
 				this.network.join(Integer.parseInt(this.request[1]));
 			}
-			else if (request[0].equals("Depart"))
+			else if (request[0].equals("depart"))
 			{
 				this.network.depart(Integer.parseInt(this.request[1]));
 			}
-			else if (request[0].equals("Print"))
+			else if (request[0].equals("print"))
 			{
 				this.network.print();
 			}
@@ -37,52 +36,35 @@ public class UserClientThread extends Thread
 			{
 				this.network.printkeyRange();
 			}
-			else if (request[0].equals("PrintItems"))
+			else if (request[0].equals("insert"))
 			{
-				this.network.printItems();
+				this.network.insert(request[1],Integer.parseInt(request[2]));
 			}
-			else if (request[0].equals("Insert"))
+			else if (request[0].equals("delete"))
 			{
-				String[] toConcat = new String[request.length-2];
-				String fileName;
-				
-				for (int i=1;i<request.length-1;i++)
-				{
-					toConcat[i-1] = request[i];
-				}
-				fileName = String.join(" ",toConcat);
-				this.network.insert(fileName,Integer.parseInt(this.request[request.length-1]));
+				this.network.delete(request[1]);
 			}
-			else if (request[0].equals("Delete") || request[0].equals("Query"))
+			else if (request[0].equals("query"))
 			{
-				String[] toConcat = new String[request.length-1];
-				String fileName;
-				
-				for (int i=1;i<request.length;i++)
-				{
-					toConcat[i-1] = request[i];
-				}
-				fileName = String.join(" ",toConcat);
-				if (request[0].equals("Delete"))
-				{
-					this.network.delete(fileName);
-				}
-				else
-				{
-					this.network.query(fileName);
-				}
+				this.network.query(request[1]);
 			}
-			else if (request[0].equals("InsertFile"))
+			else if (request[0].equals("parsefile"))
+			{
+				this.network.parseFile(request[1]);
+			}
+			else if (request[0].equals("insertfile"))
 			{
 				this.network.insertFile(request[1]);
 			}
+			else if (request[0].equals("queryfile"))
+			{
+				this.network.queryFile(request[1]);
+			}
+
 			else if (request[0].equals("KILL"))
 			{
 				this.network.KILL();
 			}
-			
-
-
 		} 
 		catch (NumberFormatException e) {
 			// TODO Auto-generated catch block
