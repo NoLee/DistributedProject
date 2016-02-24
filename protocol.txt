@@ -21,6 +21,7 @@ NODES
 join,(id),(socket of this id)
 depart,(id)
 insert,(file name),(value),(socket that started the request),Main || Node
+insertreplica,(replication size),(file name),(value),(socket that started the request),Main || Node
 delete,(file name),(socket that started the request)
 query,(file name),(socket that started the request)
 update,(next),(previous)
@@ -29,7 +30,7 @@ donedepart
 doneinsert
 donedelete
 donequery,(requested file name(s))
-findkeyrange
+findkeyrange,(replication size)
+TellKR,(replication size)
 ID
 
-Kappa

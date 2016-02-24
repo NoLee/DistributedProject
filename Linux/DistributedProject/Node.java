@@ -17,22 +17,30 @@ public class Node
 	public int mainSocket;	//main socket
 	public int leaderSocket;//leader's socket
 	public String[] keyRange;	//{HIGH ID (my id), LOW ID (previous id)}
+	public String[] keyRangeTail; // the key range of my head
+	public int repSize ;	 // replication factor
+	public String strategy ; // lazy or linear evaluation
 	public ArrayList<Pair<String, Integer>> fileList;
+	public ArrayList<Pair<String, Integer>> replicaList;
 	
-	public Node(int startsocket,String startid, int startmain, int startleader )
+	public Node(int startsocket,String startid, int startmain, int startleader,int rep, String strat )
     {
     	this.socket= startsocket;
     	this.id= Integer.parseInt(startid);
     	this.previous=startsocket; next= startsocket;
     	this.mainSocket=startmain;
     	this.leaderSocket=startleader;
+    	this.repSize= rep;
+    	this.strategy=strat;
     	this.fileList= new ArrayList<Pair<String, Integer>>();
+    	this.replicaList= new ArrayList<Pair<String, Integer>>();
     	this.keyRange = new String[] {"",""};
+    	this.keyRangeTail = new String[] {"",""};
     }	
   
     public static void main(String args[]) throws IOException
     {    
-    	Node ThisNode = new Node(Integer.parseInt(args[0]),args[1],Integer.parseInt(args[2]),Integer.parseInt(args[3]));
+    	Node ThisNode = new Node(Integer.parseInt(args[0]),args[1],Integer.parseInt(args[2]),Integer.parseInt(args[3]),Integer.parseInt(args[4]),args[5]);
         ServerSocket serverSocket = new ServerSocket(ThisNode.socket);
         while(true)
         {
@@ -67,7 +75,11 @@ public class Node
             	returnMSG=parts[1]; //Has the previous' node ID (hashed)
                 break;
             }
-            else 
+            if (parts[0].equals("HeadKR"))
+            {
+            	returnMSG=parts[1]+","+ parts[2]; //Has the previous' node ID (hashed)
+                break;
+            }
             	break;
         }
 	    kkSocket.close();
@@ -91,8 +103,8 @@ public class Node
 				//this.previous = socket; 
 				
 				String oldrange=this.keyRange[1]; //store old HIGH range, used to split files correctly
-				this.findkeyRange(); //this Node finds key range
-				this.sendRequest(socket,"findkeyrange"); //joined node (previous) finds key range 
+				this.findkeyRange(1); //this Node finds key range
+				this.sendRequest(socket,"findkeyrange,1"); //joined node (previous) finds key range 
 				
 				//distribute the files between the 2 nodes (the newly inserted and its next)	
 				isFirst = checkFirst();//check again if this node is still first 
@@ -137,8 +149,8 @@ public class Node
 				this.sendRequest(this.socket,"update" + "," + "NULL" + "," + socket); //update this node's "previous"
 				//this.previous = socket; 
 				
-				this.findkeyRange(); //this Node finds key range
-				this.sendRequest(socket,"findkeyrange"); //joined node finds range (previous)
+				this.findkeyRange(1); //this Node finds key range
+				this.sendRequest(socket,"findkeyrange,1"); //joined node finds range (previous)
 				
 				//distribute the files between the 2 nodes (the newly inserted and its next)			
 				while (myIt.hasNext()) 
@@ -169,7 +181,7 @@ public class Node
 		{
 			//next and previous nodes update their fields
 			this.sendRequest(this.next,"update" + "," + "NULL" + "," + this.previous);
-			this.sendRequest(this.next,"findkeyrange");
+			this.sendRequest(this.next,"findkeyrange,1");
 			this.sendRequest(this.previous,"update" + "," + this.next + "," + "NULL");
 			
 			//send all the files to next node
@@ -212,9 +224,15 @@ public class Node
 				//Insert completed
 				//if Main requested the insert, reply
 				//else if a Node requested the insert, just send "OK" (done in ClientThread)
-				if (sender.compareTo("Main")==0)
+				if (sender.compareTo("Main")==0 && (this.strategy.equals("lazy")||(this.repSize==1)))
 				{
+					System.out.println("Answer from :"+ this.id);
 					this.sendRequest(startsocket, "doneinsert");
+				}
+				// if we need to store replicas
+				if (this.repSize >1) 
+				{
+					this.sendRequest(this.next, "insertreplica," + (this.repSize-1) + "," + key + "," + value + "," + startsocket + "," + sender);
 				}
 			}
 			else //forward the request
@@ -238,10 +256,17 @@ public class Node
 				//Insert completed
 				//if Main requested the insert, reply
 				//else if a Node requested the insert, just send "OK" (done in ClientThread)
-				if (sender.compareTo("Main")==0)
+				if (sender.compareTo("Main")==0 && (this.strategy.equals("lazy")||(this.repSize==1)))
 				{
+					System.out.println("Answer from :"+ this.id);
 					this.sendRequest(startsocket, "doneinsert");
 				}
+				// if we need to store replicas
+				if (this.repSize >1) 
+				{
+					this.sendRequest(this.next, "insertreplica," + (this.repSize-1) + "," + key + "," + value + "," + startsocket + "," + sender);
+				}
+		
 			}
 			else //forward the request
 			{
@@ -383,12 +408,23 @@ public class Node
 	
 	/**Finds the hash Key Ranges for the Node, based on his ID and the previous' node ID 
 	 * @throws NoSuchAlgorithmException */
-	public void findkeyRange() throws UnknownHostException, IOException, NoSuchAlgorithmException
+	public void findkeyRange(int K) throws UnknownHostException, IOException, NoSuchAlgorithmException
 	{
-		String prevID;
-		prevID = this.sendRequest(this.previous,"ID");
-		this.keyRange[0] = sha1(""+this.id);
-		this.keyRange[1] = sha1(prevID);
+		if (K==1)
+		{
+			String prevID;
+			prevID = this.sendRequest(this.previous,"ID");
+			this.keyRange[0] = sha1(""+this.id);
+			this.keyRange[1] = sha1(prevID);
+		}
+		else if (K>1)
+		{
+			String KRT = this.sendRequest(this.previous, "TellKR,"+(K-1));
+			//this.keyRangeTail = KRT.split(",");
+			String Kappa[] = KRT.split(",");
+			this.keyRangeTail[0] = Kappa[0];
+			this.keyRangeTail[1] = Kappa[1];
+		}
 	}
 	
 	/**Returns true if the Node's ID is the smallest */
