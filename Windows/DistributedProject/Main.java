@@ -3,11 +3,14 @@ package DistributedProject;
 import java.net.*;
 import java.security.*;
 import java.util.*;
+//import java.util.concurrent.TimeUnit;
 	
 public class Main {
 	
 	public int socketNum;
 	public int leaderSocket;
+	public int repSize=3;
+	public String strategy="linear";
 	private ArrayList<Triple<Process, Integer,Integer>> proc; //list with the PID,ID,Socket for each process
 	
 	public Main(int startsocket)
@@ -20,7 +23,7 @@ public class Main {
 	public static void main(String args[]) throws IOException, NoSuchAlgorithmException, InterruptedException 
 	{   
 		Main network = new Main(40000);
-		ProcessBuilder pb = new ProcessBuilder("java.exe","-cp","bin","DistributedProject.Node",""+network.leaderSocket,"1",""+network.socketNum,""+network.leaderSocket);
+		ProcessBuilder pb = new ProcessBuilder("java.exe","-cp","bin","DistributedProject.Node",""+network.leaderSocket,"1",""+network.socketNum,""+network.leaderSocket,""+network.repSize,network.strategy);
 		pb.inheritIO(); 		// inherit IO to see the output of other programs 
 	    Process p = pb.start();
 	    network.proc.add(new Triple<Process,Integer,Integer>(p,1,network.leaderSocket));
@@ -29,6 +32,26 @@ public class Main {
 	    for(int i=2; i<=10; i++)
 	    {
 	    	network.join(i);	
+	    }
+	    
+	    for(int i=0; i<network.proc.size(); i++)
+	    {
+			Socket kkSocket = new Socket("localhost", network.proc.get(i).getSocket());
+	        PrintWriter out = new PrintWriter(kkSocket.getOutputStream(), true);
+			BufferedReader in = new BufferedReader(new InputStreamReader(kkSocket.getInputStream()));		
+			
+			out.println("findkeyrange,"+network.repSize);
+			String confirmation;
+			while ((confirmation = in.readLine()) != null) 
+			{
+				String[] parts =confirmation.split(","); 
+	            if (parts[0].equals("OK"))
+	            {
+		           	 break;
+	            }
+			}
+			kkSocket.close();
+	        
 	    }
 	    //waits for user input via keyboard
 	    network.listen();			
@@ -116,17 +139,15 @@ public class Main {
 	public void join(int id) throws NoSuchAlgorithmException, IOException
 	{
 		int nodeSocket = id+this.socketNum;
-		ProcessBuilder pb = new ProcessBuilder("java.exe","-cp","bin","DistributedProject.Node", ""+nodeSocket ,""+id,""+this.socketNum,""+this.leaderSocket);
+		ProcessBuilder pb = new ProcessBuilder("java.exe","-cp","bin","DistributedProject.Node", ""+nodeSocket ,""+id,""+this.socketNum,""+this.leaderSocket,""+this.repSize,this.strategy);
 		pb.inheritIO();
         Process p = pb.start();
         this.proc.add(new Triple<Process, Integer,Integer>(p,id,nodeSocket));
-        
         Socket kkSocket = new Socket("localhost", this.leaderSocket);
         PrintWriter out = new PrintWriter(kkSocket.getOutputStream(), true);
         BufferedReader in = new BufferedReader(new InputStreamReader(kkSocket.getInputStream()));
         String confirm;
-        out.println("join,"+ id + "," + nodeSocket);
-        
+        out.println("join,"+ id + "," + nodeSocket);        
 		while ((confirm = in.readLine()) != null) 
 	    {
 			//request received from node
@@ -153,8 +174,7 @@ public class Main {
 				obj=temp;
 				break;
 			}
-	    }
-		
+	    }		
 		if (obj!=null){ 
 			//connect and remove the node from the network (update keyranges and prev/next fields)
 			Socket kkSocket = new Socket("localhost", this.leaderSocket);
@@ -172,7 +192,6 @@ public class Main {
 	            }
 	        }
 			kkSocket.close();
-
 			
 			this.waitResponse();
 			//kill it and remove it from array proc
