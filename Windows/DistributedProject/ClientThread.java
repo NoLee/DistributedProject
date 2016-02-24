@@ -4,6 +4,8 @@ import java.io.*;
 import java.net.*;
 import java.security.NoSuchAlgorithmException;
 
+import Testing.Pair;
+
 public class ClientThread extends Thread
 {
 	protected Socket socket;
@@ -36,8 +38,39 @@ public class ClientThread extends Thread
 					if (parts1[4].compareTo("Node")==0)
 					{
 						out.println("OK");
-					}					
+					}			
 					break;
+				}
+				else if (parts1[0].equals("insertreplica"))
+				{
+					out.println("OK"); // maybe it will change on depart/join
+					int Kay= Integer.parseInt(parts1[1]);
+					String key = parts1[2]; 
+					int value = Integer.parseInt(parts1[3]);
+					int startsocket = Integer.parseInt(parts1[4]);
+					String sender = parts1[5];
+					Pair<String, Integer> temp= new Pair<String, Integer>(key,value);
+					this.ThisNode.replicaList.add(temp);
+					System.out.println("I am " + this.ThisNode.id + " Key: "+ key);
+			
+					if (Kay==1)
+					{
+						if(sender.equals("Main")&& this.ThisNode.strategy.equals("linear"))
+						{//last replica node must reply to the StartingNode
+							this.ThisNode.sendRequest(startsocket, "doneinsert");
+							System.out.println("Answer from :"+ this.ThisNode.id);
+						}
+						else if (sender.equals("Node")) //must put ELSE with "Node", allios kanei kyklo synexeia to arxeio gia depart/join
+						{
+							//dont send to staring node "doneinsert", he might be dead
+							System.out.println("Answer from :"+ this.ThisNode.id);
+						}						
+					}
+					else 
+					{
+						this.ThisNode.sendRequest(this.ThisNode.next, "insertreplica,"+ (Kay-1) + "," + key + "," + value + "," + startsocket + "," + sender);
+					}
+					break;				
 				}
 				else if (parts1[0].equals("doneinsert"))
 				{
@@ -65,7 +98,35 @@ public class ClientThread extends Thread
 					out.println("OK");
 					this.ThisNode.delete(parts1[1],Integer.parseInt(parts1[2]));					
 					break;				
-				}				
+				}		
+				else if (parts1[0].equals("deletereplica"))
+				{
+					out.println("OK");
+					int Kay= Integer.parseInt(parts1[1]);
+					String key = parts1[2]; 
+					String hashedkey = this.ThisNode.sha1(key); //throws warning, but it works like this
+					System.out.println(hashedkey);
+					int startsocket= Integer.parseInt(parts1[3]);
+					
+					//remove the pair
+					Pair<String, Integer> removePair;
+					removePair=this.ThisNode.contains(this.ThisNode.replicaList,hashedkey); // removePair might be null if the file does not exist
+					this.ThisNode.replicaList.remove(removePair);
+					
+					if (Kay==1)
+					{
+						if(this.ThisNode.strategy.equals("linear"))
+						{//last replica node must reply to the StartingNode
+							this.ThisNode.sendRequest(startsocket, "donedelete");
+							System.out.println("Answer from :"+ this.ThisNode.id);
+						}						
+					}
+					else 
+					{
+						this.ThisNode.sendRequest(this.ThisNode.next, "deletereplica," + (Kay-1) + "," + key  + ","+startsocket);
+					}					
+					break;				
+				}	
 				else if (parts1[0].equals("donedelete"))
 				{
 					out.println("OK");
@@ -120,15 +181,32 @@ public class ClientThread extends Thread
 					out.println("ID," + this.ThisNode.id);					
 					break;
 				}
-				else if (parts1[0].equals("findkeyrange"))
+				else if (parts1[0].equals("findkeyrange")) //find MY keyRange
 				{					
-					this.ThisNode.findkeyRange();
+					this.ThisNode.findkeyRange(Integer.parseInt(parts1[1]));
 					out.println("OK");					
 					break;
 				}
+				else if (parts1[0].equals("TellKR"))
+				{
+					int Kay = Integer.parseInt(parts1[1]);
+					
+					if ( Kay == 1)
+					{
+						//String msg=this.ThisNode.sendRequest(Integer.parseInt(parts1[2]),"HeadKR,"+this.ThisNode.keyRange[0] + ","+this.ThisNode.keyRange[1]);
+						out.println("HeadKR,"+this.ThisNode.keyRange[0] + ","+this.ThisNode.keyRange[1]);
+					}
+					else
+					{
+						String msg=this.ThisNode.sendRequest(this.ThisNode.previous,"TellKR," + (Kay-1));
+						out.println("HeadKR,"+msg);
+						//this.ThisNode.sendRequest(this.ThisNode.previous,"TellKR," + (Kay-1)+ ","+parts1[2]);
+					}
+				}
 				else if (parts1[0].equals("PrintKR"))
 				{
-					System.out.println(this.ThisNode.keyRange[0] +" "+ this.ThisNode.keyRange[1]);
+					System.out.println("KR : "+this.ThisNode.keyRange[0] +" "+ this.ThisNode.keyRange[1]);
+					System.out.println("TKR: "+this.ThisNode.keyRangeTail[0] +" "+ this.ThisNode.keyRangeTail[1]);
 					out.println("OK");					
 					break;
 				}

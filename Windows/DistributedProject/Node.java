@@ -17,22 +17,30 @@ public class Node
 	public int mainSocket;	//main socket
 	public int leaderSocket;//leader's socket
 	public String[] keyRange;	//{HIGH ID (my id), LOW ID (previous id)}
+	public String[] keyRangeTail; // the key range of my head
+	public int repSize ;	 // replication factor
+	public String strategy ; // lazy or linear evaluation
 	public ArrayList<Pair<String, Integer>> fileList;
+	public ArrayList<Pair<String, Integer>> replicaList;
 	
-	public Node(int startsocket,String startid, int startmain, int startleader )
+	public Node(int startsocket,String startid, int startmain, int startleader,int rep, String strat )
     {
     	this.socket= startsocket;
     	this.id= Integer.parseInt(startid);
     	this.previous=startsocket; next= startsocket;
     	this.mainSocket=startmain;
     	this.leaderSocket=startleader;
+    	this.repSize= rep;
+    	this.strategy=strat;
     	this.fileList= new ArrayList<Pair<String, Integer>>();
+    	this.replicaList= new ArrayList<Pair<String, Integer>>();
     	this.keyRange = new String[] {"",""};
+    	this.keyRangeTail = new String[] {"",""};
     }	
   
     public static void main(String args[]) throws IOException
     {    
-    	Node ThisNode = new Node(Integer.parseInt(args[0]),args[1],Integer.parseInt(args[2]),Integer.parseInt(args[3]));
+    	Node ThisNode = new Node(Integer.parseInt(args[0]),args[1],Integer.parseInt(args[2]),Integer.parseInt(args[3]),Integer.parseInt(args[4]),args[5]);
         ServerSocket serverSocket = new ServerSocket(ThisNode.socket);
         while(true)
         {
@@ -67,7 +75,11 @@ public class Node
             	returnMSG=parts[1]; //Has the previous' node ID (hashed)
                 break;
             }
-            else 
+            if (parts[0].equals("HeadKR"))
+            {
+            	returnMSG=parts[1]+","+ parts[2]; //Has the previous' node ID (hashed)
+                break;
+            }
             	break;
         }
 	    kkSocket.close();
@@ -79,6 +91,7 @@ public class Node
 		Iterator<Pair<String, Integer>> myIt= this.fileList.iterator();
 		String hashedid=sha1(idjoin);
 		boolean isFirst = checkFirst();
+
 		if (isFirst)//if this node is first, the one with the smallest ID
 		{
 			//if id is smaller(equal) than my HIGH || bigger than my LOW (last node), the node goes behind me
@@ -91,8 +104,8 @@ public class Node
 				//this.previous = socket; 
 				
 				String oldrange=this.keyRange[1]; //store old HIGH range, used to split files correctly
-				this.findkeyRange(); //this Node finds key range
-				this.sendRequest(socket,"findkeyrange"); //joined node (previous) finds key range 
+				this.findkeyRange(1); //this Node finds key range
+				this.sendRequest(socket,"findkeyrange,1"); //joined node (previous) finds key range 
 				
 				//distribute the files between the 2 nodes (the newly inserted and its next)	
 				isFirst = checkFirst();//check again if this node is still first 
@@ -137,8 +150,8 @@ public class Node
 				this.sendRequest(this.socket,"update" + "," + "NULL" + "," + socket); //update this node's "previous"
 				//this.previous = socket; 
 				
-				this.findkeyRange(); //this Node finds key range
-				this.sendRequest(socket,"findkeyrange"); //joined node finds range (previous)
+				this.findkeyRange(1); //this Node finds key range
+				this.sendRequest(socket,"findkeyrange,1"); //joined node finds range (previous)
 				
 				//distribute the files between the 2 nodes (the newly inserted and its next)			
 				while (myIt.hasNext()) 
@@ -169,7 +182,7 @@ public class Node
 		{
 			//next and previous nodes update their fields
 			this.sendRequest(this.next,"update" + "," + "NULL" + "," + this.previous);
-			this.sendRequest(this.next,"findkeyrange");
+			this.sendRequest(this.next,"findkeyrange,1");
 			this.sendRequest(this.previous,"update" + "," + this.next + "," + "NULL");
 			
 			//send all the files to next node
@@ -195,58 +208,40 @@ public class Node
 		Pair<String, Integer> temp= new Pair<String, Integer>(key,value);
 		String hashedkey= sha1(key);
 		boolean isFirst = checkFirst();
+		
+		//(for first node) :: if key is smaller(equal) than my HIGH || bigger than my LOW (last node), i must take the key
+		boolean checkFirstKR = isFirst && (hashedkey.compareTo(this.keyRange[0])<=0 || hashedkey.compareTo(this.keyRange[1])>0);
+		//(for other nodes) :: if key is smaller(equal) than my HIGH && bigger than my LOW , i must take the key 
+		boolean checkOtherKR = !isFirst && (hashedkey.compareTo(this.keyRange[0])<=0 && hashedkey.compareTo(this.keyRange[1])>0);
     	
-		if (isFirst)//if this node is first
+		if (checkFirstKR || checkOtherKR)
 		{
-			//if key is smaller(equal) than my HIGH || bigger than my LOW (last node), i must take the key
-			if (hashedkey.compareTo(this.keyRange[0])<=0 || hashedkey.compareTo(this.keyRange[1])>0)
+			//if an entry <key', value'> where key=key' already exists we have to remove it first to add the new one
+			Pair<String, Integer> removePair;
+			if ((removePair=this.contains(fileList,hashedkey))!= null)
 			{
-				//if an entry <key', value'> where key=key' already exists we have to remove it first to add the new one
-				Pair<String, Integer> removePair;
-				if ((removePair=this.contains(fileList,hashedkey))!= null)
-				{
-					this.fileList.remove(removePair);
-				}
-				this.fileList.add(temp);
-				
-				//Insert completed
-				//if Main requested the insert, reply
-				//else if a Node requested the insert, just send "OK" (done in ClientThread)
-				if (sender.compareTo("Main")==0)
-				{
-					this.sendRequest(startsocket, "doneinsert");
-				}
+				this.fileList.remove(removePair);
 			}
-			else //forward the request
+			this.fileList.add(temp);
+			
+			//Insert completed
+			//if Main requested the insert (and we have enetual consistency), reply
+			//else if a Node requested the insert, just send "OK" (done in ClientThread)
+			if (sender.compareTo("Main")==0 && (this.strategy.equals("lazy")||(this.repSize==1)))
 			{
-				this.sendRequest(this.next,"insert," + key + "," + value + "," + startsocket +","+ sender);
+				System.out.println("Answer from :"+ this.id);
+				this.sendRequest(startsocket, "doneinsert");
+			}
+			
+			// if we have replicas
+			if (this.repSize >1) 
+			{
+				this.sendRequest(this.next, "insertreplica," + (this.repSize-1) + "," + key + "," + value + "," + startsocket + "," + sender);
 			}
 		}
-		else //this node is not first
+		else //forward the request
 		{
-			//if key is smaller(equal) than my HIGH && bigger than my LOW , i must take the key
-			if (hashedkey.compareTo(this.keyRange[0])<=0 && hashedkey.compareTo(this.keyRange[1])>0)
-			{
-				//if an entry <key', value'> where key=key' already exists we have to remove it first to add the new one
-				Pair<String, Integer> removePair;
-				if ((removePair=this.contains(fileList,hashedkey))!= null)
-				{
-					this.fileList.remove(removePair);
-				}
-				this.fileList.add(temp);
-				
-				//Insert completed
-				//if Main requested the insert, reply
-				//else if a Node requested the insert, just send "OK" (done in ClientThread)
-				if (sender.compareTo("Main")==0)
-				{
-					this.sendRequest(startsocket, "doneinsert");
-				}
-			}
-			else //forward the request
-			{
-				this.sendRequest(this.next,"insert," + key + "," + value + "," + startsocket + "," + sender);
-			}
+			this.sendRequest(this.next,"insert," + key + "," + value + "," + startsocket +","+ sender);
 		}
 	}
 	
@@ -254,37 +249,32 @@ public class Node
 	{
 		String hashedkey= sha1(key);
 		boolean isFirst = checkFirst();
-		if (isFirst)//if this node is first
+		
+		//like insert
+		boolean checkFirstKR = isFirst && (hashedkey.compareTo(this.keyRange[0])<=0 || hashedkey.compareTo(this.keyRange[1])>0); 
+		boolean checkOtherKR = !isFirst && (hashedkey.compareTo(this.keyRange[0])<=0 && hashedkey.compareTo(this.keyRange[1])>0);
+		
+		if (checkFirstKR || checkOtherKR)
 		{
-			//if key is smaller(equal) than my HIGH || bigger than my LOW (last node), the file is in this node
-			if (hashedkey.compareTo(this.keyRange[0])<=0 || hashedkey.compareTo(this.keyRange[1])>0)
-			{
 				//if an entry <key', value'> where key=key' already exists we have to remove it
 				Pair<String, Integer> removePair;
 				removePair=this.contains(fileList,hashedkey); // removePair might be null if the file does not exist
 				this.fileList.remove(removePair);
-				this.sendRequest(startsocket, "donedelete"); // inform the starting node for the delete
-			}
-			else //forward the request
-			{
-				this.sendRequest(this.next,"delete," + key + "," + startsocket);
-			}
+				
+				if (this.strategy.equals("lazy") || this.repSize==1)
+				{
+					System.out.println("Answer from :"+ this.id);
+					this.sendRequest(startsocket, "donedelete"); // inform the starting node for the delete
+				}
+				// if we have replicas
+				if (this.repSize >1) 
+				{
+					this.sendRequest(this.next, "deletereplica," + (this.repSize-1) + "," + key  + ","+startsocket);
+				}
 		}
-		else //this node is not first
+		else //forward the request
 		{
-			//if key is smaller(equal) than my HIGH && bigger than my LOW , the file is in this node
-			if (hashedkey.compareTo(this.keyRange[0])<=0 && hashedkey.compareTo(this.keyRange[1])>0)
-			{
-				//if an entry <key', value'> where key=key' already exists we have to remove it
-				Pair<String, Integer> removePair;
-				removePair=this.contains(fileList,hashedkey); // removePair might be null if the file does not exist
-				this.fileList.remove(removePair);
-				this.sendRequest(startsocket, "donedelete"); // inform the starting node for the delete
-			}
-			else //forward the request
-			{
-				this.sendRequest(this.next,"delete," + key + "," + startsocket);
-			}
+			this.sendRequest(this.next,"delete," + key + "," + startsocket);
 		}
 	}
 	
@@ -308,58 +298,32 @@ public class Node
 		else
 		{
 			String hashedkey= sha1(key);
-			boolean isFirst = checkFirst();
-			if (isFirst)//if this node is first
+			boolean isFirst = checkFirst();			
+			//like insert
+			boolean checkFirstKR = isFirst && (hashedkey.compareTo(this.keyRange[0])<=0 || hashedkey.compareTo(this.keyRange[1])>0); 
+			boolean checkOtherKR = !isFirst && (hashedkey.compareTo(this.keyRange[0])<=0 && hashedkey.compareTo(this.keyRange[1])>0);
+			
+			if (checkFirstKR || checkOtherKR)
 			{
-				//if key is smaller(equal) than my HIGH OR bigger than my LOW (last node), the file is in this node
-				if (hashedkey.compareTo(this.keyRange[0])<=0 || hashedkey.compareTo(this.keyRange[1])>0)
+				//if an entry <key', value'> where key=key' already exists we have to return it
+				Pair<String, Integer> queryPair;
+				queryPair=this.contains(fileList,hashedkey); // removePair might be null if the file does not exist
+				if (queryPair != null)
 				{
-					//if an entry <key', value'> where key=key' already exists we have to return it
-					Pair<String, Integer> queryPair;
-					queryPair=this.contains(fileList,hashedkey); // removePair might be null if the file does not exist
-					if (queryPair != null)
-					{
-						String msg1=" FileName: " + queryPair.getKey()+ " " +"Value: " + queryPair.getValue()+ " " + "Node: " +this.id+","+startsocket;
-						//System.out.println(msg1);
-						this.sendRequest(startsocket, "donequery," +msg1 );
-					}
-					else
-					{
-						this.sendRequest(startsocket, "donequery, File does not exist" );
-					}		
+					String msg1=" FileName: " + queryPair.getKey()+ " " +"Value: " + queryPair.getValue()+ " " + "Node: " +this.id+","+startsocket;
+					//System.out.println(msg1);
+					this.sendRequest(startsocket, "donequery," +msg1 );
 				}
-				else //forward the request
+				else
 				{
-					this.sendRequest(this.next,"query," + key+","+startsocket+ "," + query_answer);
-				}
+					this.sendRequest(startsocket, "donequery, File does not exist" );
+				}		
 			}
-			else //this node is not first
+			else //forward the request
 			{
-				//if key is smaller(equal) than my HIGH AND bigger than my LOW , the file is in this node
-				if (hashedkey.compareTo(this.keyRange[0])<=0 && hashedkey.compareTo(this.keyRange[1])>0)
-				{
-					//if an entry <key', value'> where key=key' already exists we have to return it
-					Pair<String, Integer> queryPair;
-					queryPair=this.contains(fileList,hashedkey); // removePair might be null if the file does not exist
-					if (queryPair != null)
-					{
-						String msg1=" FileName: " + queryPair.getKey()+ " " +"Value: " + queryPair.getValue()+ " " + "Node: " +this.id+","+startsocket;
-						//System.out.println(msg1);
-						this.sendRequest(startsocket, "donequery," +msg1 );
-					}
-					else
-					{
-						this.sendRequest(startsocket, "donequery, File does not exist" );
-					}
-				}
-				else //forward the request
-				{
-					this.sendRequest(this.next,"query," + key+","+startsocket+ "," + query_answer);
-				}
+				this.sendRequest(this.next,"query," + key+","+startsocket+ "," + query_answer);
 			}
 		}
-		
-		
 	}
 	
 	/** Finds and returns an object (key,value) from a list of such objects
@@ -383,12 +347,24 @@ public class Node
 	
 	/**Finds the hash Key Ranges for the Node, based on his ID and the previous' node ID 
 	 * @throws NoSuchAlgorithmException */
-	public void findkeyRange() throws UnknownHostException, IOException, NoSuchAlgorithmException
+	public void findkeyRange(int K) throws UnknownHostException, IOException, NoSuchAlgorithmException
 	{
-		String prevID;
-		prevID = this.sendRequest(this.previous,"ID");
-		this.keyRange[0] = sha1(""+this.id);
-		this.keyRange[1] = sha1(prevID);
+		//find your own keyRange if replSize=1 , else find keyRangeTail
+		if (K==1)
+		{
+			String prevID;
+			prevID = this.sendRequest(this.previous,"ID");
+			this.keyRange[0] = sha1(""+this.id);
+			this.keyRange[1] = sha1(prevID);
+		}
+		else if (K>1)
+		{
+			String KRT = this.sendRequest(this.previous, "TellKR,"+(K-1));
+			//this.keyRangeTail = KRT.split(",");
+			String Kappa[] = KRT.split(",");
+			this.keyRangeTail[0] = Kappa[0];
+			this.keyRangeTail[1] = Kappa[1];
+		}
 	}
 	
 	/**Returns true if the Node's ID is the smallest */
@@ -405,18 +381,28 @@ public class Node
 	public String printItems ()
 	{
 		String result;
-		result = "" + this.id +":"+ "\\";				
+		result = "" + this.id +":"+ "\\";	
+		
 		Iterator<Pair<String, Integer>> myIt= this.fileList.iterator();
 		while (myIt.hasNext()) 
 		{
 	        Pair<String, Integer> tmp1 = myIt.next();
 	        result= result+ " " + tmp1.getKey() +" "+ tmp1.getValue() + "\\";	
 	    }
+		
+		//FOR TESTING PURPOSES, TO PRINT REPLICAS
+		result=result+"Replicas: \\";
+		Iterator<Pair<String, Integer>> myIt2= this.replicaList.iterator();
+		while (myIt2.hasNext()) 
+		{
+	        Pair<String, Integer> tmp1 = myIt2.next();
+	        result= result+ " " + tmp1.getKey() +" "+ tmp1.getValue() + "\\";	
+	    }
 		return result;
 	}
 
 	/**Encode String using sha1 algorithm*/
-	private static String sha1(String input) throws NoSuchAlgorithmException {
+	public static String sha1(String input) throws NoSuchAlgorithmException {
         MessageDigest mDigest = MessageDigest.getInstance("SHA1");
         byte[] result = mDigest.digest(input.getBytes());
         StringBuffer sb = new StringBuffer();
