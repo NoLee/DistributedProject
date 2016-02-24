@@ -9,8 +9,8 @@ public class Main {
 	
 	public int socketNum;
 	public int leaderSocket;
-	public int repSize=3;
-	public String strategy="linear";
+	public int repSize=5;
+	public String strategy="linear"; //"linear" or "lazy"
 	private ArrayList<Triple<Process, Integer,Integer>> proc; //list with the PID,ID,Socket for each process
 	
 	public Main(int startsocket)
@@ -279,7 +279,7 @@ public class Main {
 		BufferedReader br = new BufferedReader(new InputStreamReader(fstream));
 
 		String strLine;
-
+		//long startTime = System.nanoTime();
 		//Read File Line By Line
 		while ((strLine = br.readLine()) != null)   
 		{
@@ -291,6 +291,8 @@ public class Main {
 		  //insert (key,value)
 		  this.insert(key, value);
 		}
+		//long endTime = System.nanoTime();;
+		//System.out.println("Insert took " + ((endTime - startTime)/1000000) + " msec");
 		//Close the input stream
 		br.close();
 	}
@@ -302,7 +304,7 @@ public class Main {
 		BufferedReader br = new BufferedReader(new InputStreamReader(fstream));
 
 		String strLine;
-
+		
 		//Read File Line By Line
 		while ((strLine = br.readLine()) != null)   
 		{
