@@ -3,6 +3,8 @@ package DistributedProject;
 import java.io.*;
 import java.net.*;
 import java.security.NoSuchAlgorithmException;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReadWriteLock;
 
 import Testing.Pair;
 
@@ -10,10 +12,13 @@ public class ClientThread extends Thread
 {
 	protected Socket socket;
 	protected Node ThisNode;
-	public ClientThread(Socket clientSocket, Node currentNode) 
+	ReadWriteLock lock ;
+	
+	public ClientThread(Socket clientSocket, Node currentNode,ReadWriteLock locket) 
 	{
         this.socket = clientSocket;
         this.ThisNode= currentNode;
+        lock = locket;
     }
 	
 	public void run() 
@@ -50,8 +55,12 @@ public class ClientThread extends Thread
 					int startsocket = Integer.parseInt(parts1[4]);
 					String sender = parts1[5];
 					Pair<String, Integer> temp= new Pair<String, Integer>(key,value);
+					
+					Lock w = lock.writeLock();					
+					w.lock();
 					this.ThisNode.replicaList.add(temp);
-					System.out.println("I am " + this.ThisNode.id + " Key: "+ key);
+					w.unlock();					
+					//System.out.println("I am " + this.ThisNode.id + " Key: "+ key);
 			
 					if (Kay==1)
 					{
@@ -111,7 +120,11 @@ public class ClientThread extends Thread
 					//remove the pair
 					Pair<String, Integer> removePair;
 					removePair=this.ThisNode.contains(this.ThisNode.replicaList,hashedkey); // removePair might be null if the file does not exist
+					
+					Lock w = lock.writeLock();					
+					w.lock();
 					this.ThisNode.replicaList.remove(removePair);
+					w.unlock();
 					
 					if (Kay==1)
 					{

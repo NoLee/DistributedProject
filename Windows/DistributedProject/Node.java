@@ -5,6 +5,9 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import Testing.Pair;
 
@@ -22,6 +25,9 @@ public class Node
 	public String strategy ; // lazy or linear evaluation
 	public ArrayList<Pair<String, Integer>> fileList;
 	public ArrayList<Pair<String, Integer>> replicaList;
+	//lock are necessary for the "lazy evaluation"
+	//because when files are written lazily, main may request to read the same files (concurrent modification exception)
+	public final ReadWriteLock lock = new ReentrantReadWriteLock();
 	
 	public Node(int startsocket,String startid, int startmain, int startleader,int rep, String strat )
     {
@@ -45,7 +51,7 @@ public class Node
         while(true)
         {
 	        Socket clientSocket = serverSocket.accept();
-	        new ClientThread(clientSocket, ThisNode).start();
+	        new ClientThread(clientSocket, ThisNode,ThisNode.lock).start();
 	        //client socket socket is closed at the thread
         }
 
@@ -118,7 +124,10 @@ public class Node
 				        if (sha1(pair.getKey()).compareTo(hashedid)<=0 && sha1(pair.getKey()).compareTo(oldrange)>0 )
 				        {
 				        	this.sendRequest(socket, "insert," + pair.getKey() + "," + pair.getValue() + "," + this.socket + "," + "Node"); //sent request to insert the file to the new node    	
+				        	Lock w = lock.writeLock();
+				        	w.lock();
 				        	myIt.remove();//remove the file from the old node
+				        	w.unlock();
 				        }
 			        }
 			        else // new node is FIRST
@@ -127,7 +136,10 @@ public class Node
 				        if (sha1(pair.getKey()).compareTo(hashedid)<=0 || sha1(pair.getKey()).compareTo(oldrange)>0 )
 				        {
 				        	this.sendRequest(socket, "insert," + pair.getKey() + "," + pair.getValue() + "," + this.socket + "," + "Node"); //sent request to insert the file to the new node    	
+				        	Lock w = lock.writeLock();
+				        	w.lock();
 				        	myIt.remove();//remove the file from the old node
+				        	w.unlock();
 				        }
 			        }
 
@@ -161,7 +173,10 @@ public class Node
 			        if (sha1(pair.getKey()).compareTo(hashedid)<=0)
 			        {
 			        	this.sendRequest(socket, "insert," + pair.getKey() + "," + pair.getValue() + "," + this.socket + "," + "Node"); //sent request to insert the file to the new node
+			        	Lock w = lock.writeLock();
+			        	w.lock();
 			        	myIt.remove();//remove the file from the old node
+			        	w.unlock();
 			        }
 			    }
 				//Join completed
@@ -218,11 +233,16 @@ public class Node
 		{
 			//if an entry <key', value'> where key=key' already exists we have to remove it first to add the new one
 			Pair<String, Integer> removePair;
+		    Lock w = lock.writeLock();
 			if ((removePair=this.contains(fileList,hashedkey))!= null)
 			{
-				this.fileList.remove(removePair);
+			    w.lock();
+			   	this.fileList.remove(removePair);
+			    w.unlock();
 			}
+			w.lock();
 			this.fileList.add(temp);
+			w.unlock();
 			
 			//Insert completed
 			//if Main requested the insert (and we have enetual consistency), reply
@@ -258,12 +278,15 @@ public class Node
 		{
 				//if an entry <key', value'> where key=key' already exists we have to remove it
 				Pair<String, Integer> removePair;
+				Lock w = lock.writeLock();
 				removePair=this.contains(fileList,hashedkey); // removePair might be null if the file does not exist
+				w.lock();
 				this.fileList.remove(removePair);
+				w.unlock();
 				
 				if (this.strategy.equals("lazy") || this.repSize==1)
 				{
-					System.out.println("Answer from :"+ this.id);
+					//System.out.println("Answer from :"+ this.id);
 					this.sendRequest(startsocket, "donedelete"); // inform the starting node for the delete
 				}
 				// if we have replicas
@@ -298,12 +321,31 @@ public class Node
 		else
 		{
 			String hashedkey= sha1(key);
-			boolean isFirst = checkFirst();			
-			//like insert
-			boolean checkFirstKR = isFirst && (hashedkey.compareTo(this.keyRange[0])<=0 || hashedkey.compareTo(this.keyRange[1])>0); 
-			boolean checkOtherKR = !isFirst && (hashedkey.compareTo(this.keyRange[0])<=0 && hashedkey.compareTo(this.keyRange[1])>0);
+			//for the node with the lowest hash id we have that HIGH<LOW (for the range), so we need to check if a node 
+			//is the tail (the last one) of a replica chain with head of the chain being this node.
+			boolean tailOfFirst;
+			if (this.keyRangeTail[0].compareTo(this.keyRangeTail[1])<0)
+				tailOfFirst=true;
+			else 
+				tailOfFirst=false;
+			//linear evaluation, only the last node of the chain answers.
+			boolean checkReplicaFirstLinear = tailOfFirst && (hashedkey.compareTo(this.keyRangeTail[0])<=0 || hashedkey.compareTo(this.keyRangeTail[1])>0) && this.strategy.equals("linear"); 
+			boolean checkReplicaOtherLinear = !tailOfFirst && (hashedkey.compareTo(this.keyRangeTail[0])<=0 && hashedkey.compareTo(this.keyRangeTail[1])>0) && this.strategy.equals("linear");
 			
-			if (checkFirstKR || checkOtherKR)
+			//lazy evaluation, the answering node is the one that either has it or it has a replica of it.
+			boolean isFirst = checkFirst();
+			boolean checkFirstKRlazy = (isFirst && (hashedkey.compareTo(this.keyRange[0])<=0 || hashedkey.compareTo(this.keyRange[1])>0)) && this.strategy.equals("lazy"); 
+			boolean checkOtherKRlazy = (!isFirst && (hashedkey.compareTo(this.keyRange[0])<=0 && hashedkey.compareTo(this.keyRange[1])>0)) && this.strategy.equals("lazy");
+			
+			boolean hasReplicaOfFirst;
+			if (this.keyRange[1].compareTo(this.keyRangeTail[1])<0)
+				hasReplicaOfFirst=true;
+			else 
+				hasReplicaOfFirst=false;
+			boolean checkReplicaFirstLazy = (hasReplicaOfFirst && (hashedkey.compareTo(this.keyRange[1])<=0 || hashedkey.compareTo(this.keyRangeTail[1])>0)) && this.strategy.equals("lazy"); 	
+			boolean checkReplicaOtherLazy = (!hasReplicaOfFirst && (hashedkey.compareTo(this.keyRange[1])<=0 && hashedkey.compareTo(this.keyRangeTail[1])>0)) && this.strategy.equals("lazy");
+			
+			if (checkFirstKRlazy||checkOtherKRlazy)
 			{
 				//if an entry <key', value'> where key=key' already exists we have to return it
 				Pair<String, Integer> queryPair;
@@ -317,11 +359,30 @@ public class Node
 				else
 				{
 					this.sendRequest(startsocket, "donequery, File does not exist" );
-				}		
+				}			
 			}
-			else //forward the request
+			else 
 			{
-				this.sendRequest(this.next,"query," + key+","+startsocket+ "," + query_answer);
+				if (checkReplicaFirstLinear || checkReplicaOtherLinear|| checkReplicaFirstLazy || checkReplicaOtherLazy)
+				{
+					//if an entry <key', value'> where key=key' already exists we have to return it
+					Pair<String, Integer> queryPair;
+					queryPair=this.contains(replicaList,hashedkey); // removePair might be null if the file does not exist
+					if (queryPair != null)
+					{
+						String msg1=" FileName: " + queryPair.getKey()+ " " +"Value: " + queryPair.getValue()+ " " + "Node: " +this.id+","+startsocket;
+						//System.out.println(msg1);
+						this.sendRequest(startsocket, "donequery," +msg1 );
+					}
+					else
+					{
+						this.sendRequest(startsocket, "donequery, File does not exist" );
+					}		
+				}
+				else //forward the request
+				{
+					this.sendRequest(this.next,"query," + key+","+startsocket+ "," + query_answer);
+				}
 			}
 		}
 	}
@@ -332,17 +393,20 @@ public class Node
 	 *  objects with the same values (key,value)
 	 * @throws NoSuchAlgorithmException */
 	public Pair<String, Integer> contains (ArrayList<Pair<String, Integer>> myList, String key) throws NoSuchAlgorithmException
-	{
-		Iterator<Pair<String, Integer>> myIt= myList.iterator();
+	{		
+		Lock r = lock.readLock();
+	    r.lock();
+    	Iterator<Pair<String, Integer>> myIt= myList.iterator();
 		Pair<String, Integer> obj=null;
 		while (myIt.hasNext()) {
 	        Pair<String, Integer> tmp1 = myIt.next();
 	        if (sha1(tmp1.getKey()).equals(key)) //key is the hashed value
 	        {
 	            obj= tmp1;
-	        }
+	        }	        
 	    }
-		return obj;
+        r.unlock();	       
+        return obj;		
 	}
 	
 	/**Finds the hash Key Ranges for the Node, based on his ID and the previous' node ID 
@@ -402,7 +466,7 @@ public class Node
 	}
 
 	/**Encode String using sha1 algorithm*/
-	public static String sha1(String input) throws NoSuchAlgorithmException {
+	public String sha1(String input) throws NoSuchAlgorithmException {
         MessageDigest mDigest = MessageDigest.getInstance("SHA1");
         byte[] result = mDigest.digest(input.getBytes());
         StringBuffer sb = new StringBuffer();
