@@ -4,6 +4,8 @@ import java.io.*;
 import java.net.*;
 import java.security.NoSuchAlgorithmException;
 
+import Testing.Pair;
+
 public class ClientThread extends Thread
 {
 	protected Socket socket;
@@ -36,9 +38,32 @@ public class ClientThread extends Thread
 					if (parts1[4].compareTo("Node")==0)
 					{
 						out.println("OK");
-					}					
+					}			
 					break;
 				}
+				else if (parts1[0].equals("insertreplica"))
+				{
+					out.println("OK"); // maybe it will change on depart/join
+					int Kay= Integer.parseInt(parts1[1]);
+					String key = parts1[2]; 
+					int value = Integer.parseInt(parts1[3]);
+					int startsocket = Integer.parseInt(parts1[4]);
+					String sender = parts1[5];
+					Pair<String, Integer> temp= new Pair<String, Integer>(key,value);
+					this.ThisNode.replicaList.add(temp);
+					System.out.println("I am " + this.ThisNode.id + " Key: "+ key);
+					if (Kay==1 && sender.equals("Main")) // && "linear"  MANOLIS!!!!!!!!!!!!!!!!!! .!..
+					{
+						this.ThisNode.sendRequest(startsocket, "doneinsert");
+						System.out.println("Answer from :"+ this.ThisNode.id);
+					}
+					else 
+					{
+						this.ThisNode.sendRequest(this.ThisNode.next, "insertreplica,"+ (Kay-1) + "," + key + "," + value + "," + startsocket + "," + sender);
+					}
+				
+				}
+
 				else if (parts1[0].equals("doneinsert"))
 				{
 					out.println("OK");
@@ -120,15 +145,32 @@ public class ClientThread extends Thread
 					out.println("ID," + this.ThisNode.id);					
 					break;
 				}
-				else if (parts1[0].equals("findkeyrange"))
+				else if (parts1[0].equals("findkeyrange")) //find MY keyRange
 				{					
-					this.ThisNode.findkeyRange();
+					this.ThisNode.findkeyRange(Integer.parseInt(parts1[1]));
 					out.println("OK");					
 					break;
 				}
+				else if (parts1[0].equals("TellKR"))
+				{
+					int Kay = Integer.parseInt(parts1[1]);
+					
+					if ( Kay == 1)
+					{
+						//String msg=this.ThisNode.sendRequest(Integer.parseInt(parts1[2]),"HeadKR,"+this.ThisNode.keyRange[0] + ","+this.ThisNode.keyRange[1]);
+						out.println("HeadKR,"+this.ThisNode.keyRange[0] + ","+this.ThisNode.keyRange[1]);
+					}
+					else
+					{
+						String msg=this.ThisNode.sendRequest(this.ThisNode.previous,"TellKR," + (Kay-1));
+						out.println("HeadKR,"+msg);
+						//this.ThisNode.sendRequest(this.ThisNode.previous,"TellKR," + (Kay-1)+ ","+parts1[2]);
+					}
+				}
 				else if (parts1[0].equals("PrintKR"))
 				{
-					System.out.println(this.ThisNode.keyRange[0] +" "+ this.ThisNode.keyRange[1]);
+					System.out.println("KR : "+this.ThisNode.keyRange[0] +" "+ this.ThisNode.keyRange[1]);
+					System.out.println("TKR: "+this.ThisNode.keyRangeTail[0] +" "+ this.ThisNode.keyRangeTail[1]);
 					out.println("OK");					
 					break;
 				}
