@@ -334,6 +334,10 @@ public class Main {
 		  {
 			  this.query(key);
 		  }
+		  else if (request.equals("delete"))
+		  {
+			  this.delete(key);
+		  }
 		  else if (request.equals("insert"))
 		  {
 			  int value= Integer.parseInt(parts[2]);

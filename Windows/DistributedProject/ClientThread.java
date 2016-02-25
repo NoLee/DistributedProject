@@ -114,7 +114,7 @@ public class ClientThread extends Thread
 					int Kay= Integer.parseInt(parts1[1]);
 					String key = parts1[2]; 
 					String hashedkey = this.ThisNode.sha1(key); //throws warning, but it works like this
-					System.out.println(hashedkey);
+					//System.out.println(hashedkey);
 					int startsocket= Integer.parseInt(parts1[3]);
 					
 					//remove the pair

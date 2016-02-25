@@ -358,7 +358,7 @@ public class Node
 				}
 				else
 				{
-					this.sendRequest(startsocket, "donequery, File does not exist" );
+					this.sendRequest(startsocket, "donequery, File does not exist Node: " +this.id );
 				}			
 			}
 			else 
@@ -376,7 +376,7 @@ public class Node
 					}
 					else
 					{
-						this.sendRequest(startsocket, "donequery, File does not exist" );
+						this.sendRequest(startsocket, "donequery, File does not exist Node: " +this.id );
 					}		
 				}
 				else //forward the request
