@@ -10,7 +10,7 @@ public class Main {
 	public int socketNum;
 	public int leaderSocket;
 	public int repSize=5;
-	public String strategy="linear"; //"linear" or "lazy"
+	public String strategy="lazy"; //"linear" or "lazy"
 	private ArrayList<Triple<Process, Integer,Integer>> proc; //list with the PID,ID,Socket for each process
 	
 	public Main(int startsocket)
@@ -333,6 +333,10 @@ public class Main {
 		  if (request.equals("query"))
 		  {
 			  this.query(key);
+		  }
+		  else if (request.equals("delete"))
+		  {
+			  this.delete(key);
 		  }
 		  else if (request.equals("insert"))
 		  {
