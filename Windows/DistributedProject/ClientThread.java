@@ -3,6 +3,7 @@ package DistributedProject;
 import java.io.*;
 import java.net.*;
 import java.security.NoSuchAlgorithmException;
+import java.util.Iterator;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReadWriteLock;
 
@@ -55,8 +56,17 @@ public class ClientThread extends Thread
 					int startsocket = Integer.parseInt(parts1[4]);
 					String sender = parts1[5];
 					Pair<String, Integer> temp= new Pair<String, Integer>(key,value);
+					Pair<String, Integer> removePair;
 					
-					Lock w = lock.writeLock();					
+					Lock w = lock.writeLock();
+					String hashedkey = this.ThisNode.sha1(key);
+					System.out.println(key+ "Hashed:"+ hashedkey);
+					if ((removePair=this.ThisNode.contains(this.ThisNode.replicaList,hashedkey))!= null)
+					{
+					    w.lock();
+					   	this.ThisNode.replicaList.remove(removePair);
+					    w.unlock();
+					}
 					w.lock();
 					this.ThisNode.replicaList.add(temp);
 					w.unlock();					
@@ -139,7 +149,28 @@ public class ClientThread extends Thread
 						this.ThisNode.sendRequest(this.ThisNode.next, "deletereplica," + (Kay-1) + "," + key  + ","+startsocket);
 					}					
 					break;				
-				}	
+				}
+				else if (parts1[0].equals("deleterepnode"))
+				{
+					out.println("OK");
+					String key = parts1[1];
+					int Kay=Integer.parseInt(parts1[2]);
+					if (Kay==1)
+					{
+						String hashedkey = this.ThisNode.sha1(key);
+						Pair<String, Integer> removePair;
+						removePair=this.ThisNode.contains(this.ThisNode.replicaList,hashedkey); // removePair might be null if the file does not exist
+						Lock w = lock.writeLock();					
+						w.lock();
+						this.ThisNode.replicaList.remove(removePair);
+						w.unlock();
+					}
+					else 
+					{
+						this.ThisNode.sendRequest(this.ThisNode.next, "deleterepnode" + "," + key + "," + (Kay-1));
+					}
+					break;
+				}
 				else if (parts1[0].equals("donedelete"))
 				{
 					out.println("OK");
@@ -159,6 +190,26 @@ public class ClientThread extends Thread
 					out.println("OK");
 					this.ThisNode.sendRequest(this.ThisNode.mainSocket, "donejoin");
 					
+					break;
+				}
+				else if (parts1[0].equals("fixreplicas"))
+				{
+					out.println("OK");
+					int Kay = Integer.parseInt(parts1[1]);
+					Iterator<Pair<String, Integer>> myIt= this.ThisNode.fileList.iterator();
+					Lock r = lock.readLock();
+				    r.lock();
+					while (myIt.hasNext()) 
+					{
+				        Pair<String, Integer> tmp1 = myIt.next();
+				        this.ThisNode.sendRequest(this.ThisNode.next, "insertreplica,"+ (this.ThisNode.repSize-1) + "," + tmp1.getKey() + "," + tmp1.getValue() + "," + this.ThisNode.socket + "," + "Node");
+				        this.ThisNode.sendRequest(this.ThisNode.next, "deleterepnode" + "," + tmp1.getKey() + "," + this.ThisNode.repSize);
+				    }
+					r.unlock();	
+					if (Kay>1)
+					{
+						this.ThisNode.sendRequest(this.ThisNode.previous , "fixreplicas" + "," + (Kay-1));
+					}
 					break;
 				}
 				else if (parts1[0].equals("depart"))
@@ -196,7 +247,7 @@ public class ClientThread extends Thread
 				}
 				else if (parts1[0].equals("findkeyrange")) //find MY keyRange
 				{					
-					this.ThisNode.findkeyRange(Integer.parseInt(parts1[1]));
+					this.ThisNode.findkeyRange(Integer.parseInt(parts1[1]),Integer.parseInt(parts1[2]));
 					out.println("OK");					
 					break;
 				}

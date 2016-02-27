@@ -103,6 +103,7 @@ public class Node
 			//if id is smaller(equal) than my HIGH || bigger than my LOW (last node), the node goes behind me
 			if (hashedid.compareTo(this.keyRange[0])<=0 || hashedid.compareTo(this.keyRange[1])>0)
 			{
+				int oldprevious= this.previous; // the old previous node, before we change it
 				//message from sendrequest is ignored (null)
 				this.sendRequest(socket,"update" + "," + this.socket+ "," + this.previous); //send message to the joining node
 				this.sendRequest(this.previous, "update" + "," + socket + "," + "NULL"); //update the previous node's "next"
@@ -110,8 +111,10 @@ public class Node
 				//this.previous = socket; 
 				
 				String oldrange=this.keyRange[1]; //store old HIGH range, used to split files correctly
-				this.findkeyRange(1); //this Node finds key range
-				this.sendRequest(socket,"findkeyrange,1"); //joined node (previous) finds key range 
+				this.findkeyRange(1,1); //this Node finds key range
+				
+				this.sendRequest(socket,"findkeyrange,1,1"); //joined node (previous) finds key range 
+				this.sendRequest(socket,"findkeyrange" + "," + this.repSize + "," + this.repSize);
 				
 				//distribute the files between the 2 nodes (the newly inserted and its next)	
 				isFirst = checkFirst();//check again if this node is still first 
@@ -123,7 +126,8 @@ public class Node
 				        // fileKey < newID && fileKey > oldHighRange , then send it to joined node
 				        if (sha1(pair.getKey()).compareTo(hashedid)<=0 && sha1(pair.getKey()).compareTo(oldrange)>0 )
 				        {
-				        	this.sendRequest(socket, "insert," + pair.getKey() + "," + pair.getValue() + "," + this.socket + "," + "Node"); //sent request to insert the file to the new node    	
+				        	this.sendRequest(socket, "insert," + pair.getKey() + "," + pair.getValue() + "," + this.socket + "," + "Node"); //sent request to insert the file to the new node   
+				        	this.sendRequest(this.next, "deleterepnode" + "," + pair.getKey() + "," + (this.repSize-1));
 				        	Lock w = lock.writeLock();
 				        	w.lock();
 				        	myIt.remove();//remove the file from the old node
@@ -135,15 +139,17 @@ public class Node
 			        	// fileKey < newID || fileKey > oldHighRange , then send it to joined node
 				        if (sha1(pair.getKey()).compareTo(hashedid)<=0 || sha1(pair.getKey()).compareTo(oldrange)>0 )
 				        {
-				        	this.sendRequest(socket, "insert," + pair.getKey() + "," + pair.getValue() + "," + this.socket + "," + "Node"); //sent request to insert the file to the new node    	
+				        	this.sendRequest(socket, "insert," + pair.getKey() + "," + pair.getValue() + "," + this.socket + "," + "Node"); //sent request to insert the file to the new node 
+				        	this.sendRequest(this.next, "deleterepnode" + "," + pair.getKey() + "," + (this.repSize-1));
 				        	Lock w = lock.writeLock();
 				        	w.lock();
 				        	myIt.remove();//remove the file from the old node
 				        	w.unlock();
-				        }
+				        }	        
 			        }
 
 			    }
+				this.sendRequest(oldprevious , "fixreplicas" + "," + (this.repSize-1));
 				//Join completed
 				this.sendRequest(this.leaderSocket, "donejoin");				
 			}
@@ -153,17 +159,20 @@ public class Node
 			}
 		}
 		else //this node is not first
-		{
+		{			
 			//if id is smaller(equal) than my HIGH && bigger than my LOW , the node goes behind me
 			if (hashedid.compareTo(this.keyRange[0])<=0 && hashedid.compareTo(this.keyRange[1])>0)
-			{
+			{	
+				int oldprevious= this.previous; // the old previous node, before we change it
 				this.sendRequest(socket,"update" + "," + this.socket + "," + this.previous); //send message to the joining node
 				this.sendRequest(this.previous, "update" + "," + socket + "," + "NULL"); //update the previous node's "next"
 				this.sendRequest(this.socket,"update" + "," + "NULL" + "," + socket); //update this node's "previous"
 				//this.previous = socket; 
 				
-				this.findkeyRange(1); //this Node finds key range
-				this.sendRequest(socket,"findkeyrange,1"); //joined node finds range (previous)
+				this.findkeyRange(1,1); //this Node finds key range
+				this.sendRequest(socket,"findkeyrange,1,1"); //joined node finds range (previous)
+				
+				this.sendRequest(socket,"findkeyrange" + "," + this.repSize + "," + this.repSize);
 				
 				//distribute the files between the 2 nodes (the newly inserted and its next)			
 				while (myIt.hasNext()) 
@@ -173,12 +182,14 @@ public class Node
 			        if (sha1(pair.getKey()).compareTo(hashedid)<=0)
 			        {
 			        	this.sendRequest(socket, "insert," + pair.getKey() + "," + pair.getValue() + "," + this.socket + "," + "Node"); //sent request to insert the file to the new node
+			        	this.sendRequest(this.next, "deleterepnode" + "," + pair.getKey() + "," + (this.repSize-1));
 			        	Lock w = lock.writeLock();
 			        	w.lock();
 			        	myIt.remove();//remove the file from the old node
 			        	w.unlock();
 			        }
 			    }
+				this.sendRequest(oldprevious , "fixreplicas" + "," + (this.repSize-1));
 				//Join completed
 				this.sendRequest(this.leaderSocket, "donejoin");
 			}
@@ -197,16 +208,19 @@ public class Node
 		{
 			//next and previous nodes update their fields
 			this.sendRequest(this.next,"update" + "," + "NULL" + "," + this.previous);
-			this.sendRequest(this.next,"findkeyrange,1");
+			this.sendRequest(this.next,"findkeyrange,1,1");
 			this.sendRequest(this.previous,"update" + "," + this.next + "," + "NULL");
 			
+			this.sendRequest(this.next,"findkeyrange" + "," + this.repSize + "," + (this.repSize-1));
 			//send all the files to next node
 			Iterator<Pair<String, Integer>> pair= this.fileList.iterator();
 			while (pair.hasNext()) 
 			{
 		        	Pair<String, Integer> tmp1 = pair.next();
 			        this.sendRequest(this.next,"insert," + tmp1.getKey() + "," + tmp1.getValue() + "," + this.socket + "," +"Node");
+			        this.sendRequest(this.next, "deleterepnode" + "," + tmp1.getKey() + "," + 1);
 		    }
+			this.sendRequest(this.previous , "fixreplicas" + "," + (this.repSize-1));
 			//Depart completed
 			this.sendRequest(this.leaderSocket, "donedepart");
 			
@@ -411,7 +425,7 @@ public class Node
 	
 	/**Finds the hash Key Ranges for the Node, based on his ID and the previous' node ID 
 	 * @throws NoSuchAlgorithmException */
-	public void findkeyRange(int K) throws UnknownHostException, IOException, NoSuchAlgorithmException
+	public void findkeyRange(int K, int nextK) throws UnknownHostException, IOException, NoSuchAlgorithmException
 	{
 		//find your own keyRange if replSize=1 , else find keyRangeTail
 		if (K==1)
@@ -428,6 +442,10 @@ public class Node
 			String Kappa[] = KRT.split(",");
 			this.keyRangeTail[0] = Kappa[0];
 			this.keyRangeTail[1] = Kappa[1];
+			if (nextK>1)
+			{
+				this.sendRequest(this.next, "findkeyrange" + "," + K + "," + (nextK-1));
+			}
 		}
 	}
 	

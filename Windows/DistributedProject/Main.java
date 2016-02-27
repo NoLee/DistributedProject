@@ -9,8 +9,8 @@ public class Main {
 	
 	public int socketNum;
 	public int leaderSocket;
-	public int repSize=5;
-	public String strategy="lazy"; //"linear" or "lazy"
+	public int repSize=3;
+	public String strategy="linear"; //"linear" or "lazy"
 	private ArrayList<Triple<Process, Integer,Integer>> proc; //list with the PID,ID,Socket for each process
 	
 	public Main(int startsocket)
@@ -32,26 +32,6 @@ public class Main {
 	    for(int i=2; i<=10; i++)
 	    {
 	    	network.join(i);	
-	    }
-	    
-	    for(int i=0; i<network.proc.size(); i++)
-	    {
-			Socket kkSocket = new Socket("localhost", network.proc.get(i).getSocket());
-	        PrintWriter out = new PrintWriter(kkSocket.getOutputStream(), true);
-			BufferedReader in = new BufferedReader(new InputStreamReader(kkSocket.getInputStream()));		
-			
-			out.println("findkeyrange,"+network.repSize);
-			String confirmation;
-			while ((confirmation = in.readLine()) != null) 
-			{
-				String[] parts =confirmation.split(","); 
-	            if (parts[0].equals("OK"))
-	            {
-		           	 break;
-	            }
-			}
-			kkSocket.close();
-	        
 	    }
 	    //waits for user input via keyboard
 	    network.listen();			
