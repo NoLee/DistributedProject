@@ -3,11 +3,7 @@ package DistributedProject;
 import java.io.*;
 import java.net.*;
 import java.security.NoSuchAlgorithmException;
-import java.util.Iterator;
-import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReadWriteLock;
-
-import Testing.Pair;
 
 public class ClientThread extends Thread
 {
@@ -50,52 +46,14 @@ public class ClientThread extends Thread
 				else if (parts1[0].equals("insertreplica"))
 				{
 					out.println("OK"); // maybe it will change on depart/join
-					int Kay= Integer.parseInt(parts1[1]);
-					String key = parts1[2]; 
-					int value = Integer.parseInt(parts1[3]);
-					int startsocket = Integer.parseInt(parts1[4]);
-					String sender = parts1[5];
-					Pair<String, Integer> temp= new Pair<String, Integer>(key,value);
-					Pair<String, Integer> removePair;
-					
-					Lock w = lock.writeLock();
-					String hashedkey = this.ThisNode.sha1(key);
-					System.out.println(key+ "Hashed:"+ hashedkey);
-					if ((removePair=this.ThisNode.contains(this.ThisNode.replicaList,hashedkey))!= null)
-					{
-					    w.lock();
-					   	this.ThisNode.replicaList.remove(removePair);
-					    w.unlock();
-					}
-					w.lock();
-					this.ThisNode.replicaList.add(temp);
-					w.unlock();					
-					//System.out.println("I am " + this.ThisNode.id + " Key: "+ key);
-			
-					if (Kay==1)
-					{
-						if(sender.equals("Main")&& this.ThisNode.strategy.equals("linear"))
-						{//last replica node must reply to the StartingNode
-							this.ThisNode.sendRequest(startsocket, "doneinsert");
-							System.out.println("Answer from :"+ this.ThisNode.id);
-						}
-						else if (sender.equals("Node")) //must put ELSE with "Node", allios kanei kyklo synexeia to arxeio gia depart/join
-						{
-							//dont send to staring node "doneinsert", he might be dead
-							System.out.println("Answer from :"+ this.ThisNode.id);
-						}						
-					}
-					else 
-					{
-						this.ThisNode.sendRequest(this.ThisNode.next, "insertreplica,"+ (Kay-1) + "," + key + "," + value + "," + startsocket + "," + sender);
-					}
+					this.ThisNode.insertreplica(Integer.parseInt(parts1[1]),parts1[2],Integer.parseInt(parts1[3]),Integer.parseInt(parts1[4]),parts1[5]);
 					break;				
 				}
 				else if (parts1[0].equals("doneinsert"))
 				{
 					out.println("OK");
 					//inform main
-					this.ThisNode.sendRequest(this.ThisNode.mainSocket, "doneinsert" );					
+					this.ThisNode.sendRequest(Integer.parseInt(parts1[1]), "doneinsert" + "," + parts1[2] );					
 					break;
 				}
 				else if (parts1[0].equals("query"))
@@ -109,7 +67,7 @@ public class ClientThread extends Thread
 				{
 					out.println("OK");
 					//inform main
-					this.ThisNode.sendRequest(this.ThisNode.mainSocket, "donequery," +parts1[1] );					
+					this.ThisNode.sendRequest(Integer.parseInt(parts1[1]), "donequery" + "," + parts1[2] );					
 					break;
 				}
 				else if (parts1[0].equals("delete"))
@@ -121,61 +79,20 @@ public class ClientThread extends Thread
 				else if (parts1[0].equals("deletereplica"))
 				{
 					out.println("OK");
-					int Kay= Integer.parseInt(parts1[1]);
-					String key = parts1[2]; 
-					String hashedkey = this.ThisNode.sha1(key); //throws warning, but it works like this
-					//System.out.println(hashedkey);
-					int startsocket= Integer.parseInt(parts1[3]);
-					
-					//remove the pair
-					Pair<String, Integer> removePair;
-					removePair=this.ThisNode.contains(this.ThisNode.replicaList,hashedkey); // removePair might be null if the file does not exist
-					
-					Lock w = lock.writeLock();					
-					w.lock();
-					this.ThisNode.replicaList.remove(removePair);
-					w.unlock();
-					
-					if (Kay==1)
-					{
-						if(this.ThisNode.strategy.equals("linear"))
-						{//last replica node must reply to the StartingNode
-							this.ThisNode.sendRequest(startsocket, "donedelete");
-							System.out.println("Answer from :"+ this.ThisNode.id);
-						}						
-					}
-					else 
-					{
-						this.ThisNode.sendRequest(this.ThisNode.next, "deletereplica," + (Kay-1) + "," + key  + ","+startsocket);
-					}					
+					this.ThisNode.deletereplica(Integer.parseInt(parts1[1]), parts1[2], Integer.parseInt(parts1[3]));				
 					break;				
 				}
 				else if (parts1[0].equals("deleterepnode"))
 				{
 					out.println("OK");
-					String key = parts1[1];
-					int Kay=Integer.parseInt(parts1[2]);
-					if (Kay==1)
-					{
-						String hashedkey = this.ThisNode.sha1(key);
-						Pair<String, Integer> removePair;
-						removePair=this.ThisNode.contains(this.ThisNode.replicaList,hashedkey); // removePair might be null if the file does not exist
-						Lock w = lock.writeLock();					
-						w.lock();
-						this.ThisNode.replicaList.remove(removePair);
-						w.unlock();
-					}
-					else 
-					{
-						this.ThisNode.sendRequest(this.ThisNode.next, "deleterepnode" + "," + key + "," + (Kay-1));
-					}
+					this.ThisNode.deleterepnode(parts1[1], Integer.parseInt(parts1[2]));
 					break;
 				}
 				else if (parts1[0].equals("donedelete"))
 				{
 					out.println("OK");
 					//inform main
-					this.ThisNode.sendRequest(this.ThisNode.mainSocket, "donedelete" );					
+					this.ThisNode.sendRequest(Integer.parseInt(parts1[1]), "donedelete" + "," + parts1[2] );					
 					break;
 				}
 				else if (parts1[0].equals("join"))
@@ -188,28 +105,13 @@ public class ClientThread extends Thread
 				else if (parts1[0].equals("donejoin"))
 				{
 					out.println("OK");
-					this.ThisNode.sendRequest(this.ThisNode.mainSocket, "donejoin");
-					
+					this.ThisNode.sendRequest(Integer.parseInt(parts1[1]), "donejoin" + "," + parts1[2]);
 					break;
 				}
 				else if (parts1[0].equals("fixreplicas"))
 				{
 					out.println("OK");
-					int Kay = Integer.parseInt(parts1[1]);
-					Iterator<Pair<String, Integer>> myIt= this.ThisNode.fileList.iterator();
-					Lock r = lock.readLock();
-				    r.lock();
-					while (myIt.hasNext()) 
-					{
-				        Pair<String, Integer> tmp1 = myIt.next();
-				        this.ThisNode.sendRequest(this.ThisNode.next, "insertreplica,"+ (this.ThisNode.repSize-1) + "," + tmp1.getKey() + "," + tmp1.getValue() + "," + this.ThisNode.socket + "," + "Node");
-				        this.ThisNode.sendRequest(this.ThisNode.next, "deleterepnode" + "," + tmp1.getKey() + "," + this.ThisNode.repSize);
-				    }
-					r.unlock();	
-					if (Kay>1)
-					{
-						this.ThisNode.sendRequest(this.ThisNode.previous , "fixreplicas" + "," + (Kay-1));
-					}
+					this.ThisNode.fixreplicas(Integer.parseInt(parts1[1]));
 					break;
 				}
 				else if (parts1[0].equals("depart"))
@@ -222,10 +124,11 @@ public class ClientThread extends Thread
 				else if (parts1[0].equals("donedepart"))
 				{
 					out.println("OK");
-					this.ThisNode.sendRequest(this.ThisNode.mainSocket, "donedepart");
+					this.ThisNode.sendRequest(Integer.parseInt(parts1[1]), "donedepart" + "," + parts1[2]);;
 					
 					break;
 				}
+				// ------ BELOW HERE WE USE NODE ATTRIBUTES SO WE CANT MAKE THEM PRIVATE! ------
 				else if (parts1[0].equals("update"))
 				{					
 					if (!parts1[1].equals("NULL"))
@@ -257,14 +160,12 @@ public class ClientThread extends Thread
 					
 					if ( Kay == 1)
 					{
-						//String msg=this.ThisNode.sendRequest(Integer.parseInt(parts1[2]),"HeadKR,"+this.ThisNode.keyRange[0] + ","+this.ThisNode.keyRange[1]);
 						out.println("HeadKR,"+this.ThisNode.keyRange[0] + ","+this.ThisNode.keyRange[1]);
 					}
 					else
 					{
 						String msg=this.ThisNode.sendRequest(this.ThisNode.previous,"TellKR," + (Kay-1));
 						out.println("HeadKR,"+msg);
-						//this.ThisNode.sendRequest(this.ThisNode.previous,"TellKR," + (Kay-1)+ ","+parts1[2]);
 					}
 				}
 				else if (parts1[0].equals("PrintKR"))

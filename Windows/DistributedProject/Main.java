@@ -69,18 +69,22 @@ public class Main {
             }
             else if (parts[0].equals("donejoin"))
             {
+            	System.out.println(parts[1]);
             	break;
             }
             else if (parts[0].equals("doneinsert"))
             {
+            	System.out.println(parts[1]);
             	break;
             }
             else if (parts[0].equals("donedelete"))
             {
+            	System.out.println(parts[1]);
             	break;
             }
             else if (parts[0].equals("donedepart"))
             {
+            	System.out.println(parts[1]);
             	break;
             }
             else if (parts[0].equals("doneprint"))
