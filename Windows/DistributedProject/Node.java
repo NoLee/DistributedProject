@@ -371,7 +371,7 @@ public class Node
 				}
 				else
 				{
-					this.sendRequest(startsocket, "donequery" + "," + this.mainSocket + "File does not exist|QUERY Answer from: " +this.id );
+					this.sendRequest(startsocket, "donequery" + "," + this.mainSocket + ",File does not exist|QUERY Answer from: " +this.id );
 				}			
 			}
 			else 
@@ -384,11 +384,11 @@ public class Node
 					if (queryPair != null)
 					{
 						String msg1= queryPair.getKey()+ " "  + queryPair.getValue()+ " " + "|QUERY Answer from: " +this.id;
-						this.sendRequest(startsocket, "donequery," +msg1 );
+						this.sendRequest(startsocket, "donequery,"  + this.mainSocket + "," +msg1 );
 					}
 					else
 					{
-						this.sendRequest(startsocket, "donequery" + "," + this.mainSocket + "File does not exist|QUERY Answer from: " +this.id );
+						this.sendRequest(startsocket, "donequery" + "," + this.mainSocket + ",File does not exist|QUERY Answer from: " +this.id );
 					}		
 				}
 				else //forward the request
@@ -400,7 +400,7 @@ public class Node
 	}
 	
     /**
-	* Node inserts a file (key,value) to its replica list, forwards the
+	* Node inserts a file (key,value) from its replica list, forwards the
 	* request, if more replicas need to be entered and acts according
 	* to its strategy (Lazy or Linear)
 	* @throws NoSuchAlgorithmException
@@ -503,7 +503,7 @@ public class Node
 	/**
 	 * When a new node joins or an old one departs the nodes near this one
 	 * must either insert some replicas that they didn't had or delete some
-	 * that they are not supposed t
+	 * that they are not supposed to
 	 * @throws UnknownHostException
 	 * @throws IOException
 	 */
@@ -550,7 +550,8 @@ public class Node
         return obj;		
 	}
 	
-	/**Finds the hash Key Ranges for the Node, based on his ID and the previous' node ID 
+	/**K=1 Finds the hash Key Ranges for the Node, based on his ID and the previous' node ID 
+	 * K>1 Finds the hash Key Ranges of the chain's head of this Node
 	 * @throws NoSuchAlgorithmException */
 	public void findkeyRange(int K, int nextK) throws UnknownHostException, IOException, NoSuchAlgorithmException
 	{
