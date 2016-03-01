@@ -13,21 +13,22 @@ import Testing.Pair;
 
 public class Node
 {
-	public int previous;	//socket of previous node
-	public int next;   		//socket of next node
-	public int socket; 		//my socket
-	public int id; 			//id is not hashed
-	public int mainSocket;	//main socket
-	public int leaderSocket;//leader's socket
-	public String[] keyRange;	//{HIGH ID (my id), LOW ID (previous id)}
+	private int previous;	//socket of previous node
+	private int next;   		//socket of next node
+	private int socket; 		//my socket
+	private int id; 			//id is not hashed
+	private int mainSocket;	//main socket
+	private int leaderSocket;//leader's socket
+	private String[] keyRange;	//{HIGH ID (my id), LOW ID (previous id)}
 	public String[] keyRangeTail; // the key range of my head
-	public int repSize ;	 // replication factor
-	public String strategy ; // lazy or linear evaluation
-	public ArrayList<Pair<String, Integer>> fileList;
-	public ArrayList<Pair<String, Integer>> replicaList;
+	private int repSize ;	 // replication factor
+	private String strategy ; // lazy or linear evaluation
+	private ArrayList<Pair<String, Integer>> fileList;
+	private ArrayList<Pair<String, Integer>> replicaList;
 	//lock are necessary for the "lazy evaluation"
 	//because when files are written lazily, main may request to read the same files (concurrent modification exception)
-	public final ReadWriteLock lock = new ReentrantReadWriteLock();
+	
+	private final ReadWriteLock lock = new ReentrantReadWriteLock();
 	
 	public Node(int startsocket,String startid, int startmain, int startleader,int rep, String strat )
     {
@@ -42,8 +43,38 @@ public class Node
     	this.replicaList= new ArrayList<Pair<String, Integer>>();
     	this.keyRange = new String[] {"",""};
     	this.keyRangeTail = new String[] {"",""};
-    }	
-  
+    }
+	
+	// Some setters/getters for the node Attributes
+	public int getID()
+	{
+		return this.id;
+	}
+	public int getmainSocket()
+	{
+		return this.mainSocket;
+	}
+	public int getNext ()
+	{
+		return this.next;
+	}
+	public void setNext (int value)
+	{
+		this.next=value;
+	}
+	public int getPrevious ()
+	{
+		return this.previous;
+	}
+	public void setPrevious (int value)
+	{
+		this.previous=value;
+	}
+	public String[] getkeyRange()
+	{
+		return this.keyRange;
+	}
+	
     public static void main(String args[]) throws IOException
     {    
     	Node ThisNode = new Node(Integer.parseInt(args[0]),args[1],Integer.parseInt(args[2]),Integer.parseInt(args[3]),Integer.parseInt(args[4]),args[5]);
@@ -51,12 +82,18 @@ public class Node
         while(true)
         {
 	        Socket clientSocket = serverSocket.accept();
-	        new ClientThread(clientSocket, ThisNode,ThisNode.lock).start();
+	        new ClientThread(clientSocket, ThisNode ).start(); //,ThisNode.lock).start();
 	        //client socket socket is closed at the thread
         }
 
     }	
     
+    /**
+     * Send a request (in the type of String) to a Node that listens to a specific socket
+     * @return
+     * @throws UnknownHostException
+     * @throws IOException
+     */
 	public String sendRequest (int socket,String request) throws UnknownHostException, IOException
 	{
 		String returnMSG=null;
@@ -83,7 +120,7 @@ public class Node
             }
             if (parts[0].equals("HeadKR"))
             {
-            	returnMSG=parts[1]+","+ parts[2]; //Has the previous' node ID (hashed)
+            	returnMSG=parts[1] + "," + parts[2]; //Has the previous' node ID (hashed)
                 break;
             }
             	break;
@@ -92,6 +129,7 @@ public class Node
 	    return returnMSG;
 	}
 	
+	//Main methods for a node : join, depart, insert, delete, query 
 	public void join(String idjoin, int socket) throws UnknownHostException, IOException, NoSuchAlgorithmException 
 	{
 		Iterator<Pair<String, Integer>> myIt= this.fileList.iterator();
@@ -114,7 +152,7 @@ public class Node
 				this.findkeyRange(1,1); //this Node finds key range
 				
 				this.sendRequest(socket,"findkeyrange,1,1"); //joined node (previous) finds key range 
-				this.sendRequest(socket,"findkeyrange" + "," + this.repSize + "," + this.repSize);
+				this.sendRequest(socket,"findkeyrange" + "," + this.repSize + "," + (this.repSize+1));
 				
 				//distribute the files between the 2 nodes (the newly inserted and its next)	
 				isFirst = checkFirst();//check again if this node is still first 
@@ -151,7 +189,8 @@ public class Node
 			    }
 				this.sendRequest(oldprevious , "fixreplicas" + "," + (this.repSize-1));
 				//Join completed
-				this.sendRequest(this.leaderSocket, "donejoin" + "," + this.mainSocket + "," + "JOIN Answer from: "+ this.id);				
+				this.sendRequest(this.leaderSocket, "donejoin");
+				//this.sendRequest(this.leaderSocket, "donejoin" + "," + "JOIN Answer from: "+ this.id);				
 			}
 			else //node doesn't join here, ask next node
 			{
@@ -171,7 +210,7 @@ public class Node
 				this.findkeyRange(1,1); //this Node finds key range
 				this.sendRequest(socket,"findkeyrange,1,1"); //joined node finds range (previous)
 				
-				this.sendRequest(socket,"findkeyrange" + "," + this.repSize + "," + this.repSize);
+				this.sendRequest(socket,"findkeyrange" + "," + this.repSize + "," + (this.repSize+1));
 				
 				//distribute the files between the 2 nodes (the newly inserted and its next)			
 				while (myIt.hasNext()) 
@@ -190,7 +229,8 @@ public class Node
 			    }
 				this.sendRequest(oldprevious , "fixreplicas" + "," + (this.repSize-1));
 				//Join completed
-				this.sendRequest(this.leaderSocket, "donejoin" + "," + this.mainSocket + "," + "JOIN Answer from: "+ this.id);
+				this.sendRequest(this.leaderSocket, "donejoin");
+				//this.sendRequest(this.leaderSocket, "donejoin" + "," + "JOIN Answer from: "+ this.id);
 			}
 			else //node doesn't join here, ask next node
 			{
@@ -210,7 +250,7 @@ public class Node
 			this.sendRequest(this.next,"findkeyrange,1,1");
 			this.sendRequest(this.previous,"update" + "," + this.next + "," + "NULL");
 			
-			this.sendRequest(this.next,"findkeyrange" + "," + this.repSize + "," + (this.repSize-1));
+			this.sendRequest(this.next,"findkeyrange" + "," + this.repSize + "," + this.repSize);
 			//send all the files to next node
 			Iterator<Pair<String, Integer>> pair= this.fileList.iterator();
 			while (pair.hasNext()) 
@@ -221,7 +261,8 @@ public class Node
 		    }
 			this.sendRequest(this.previous , "fixreplicas" + "," + (this.repSize-1));
 			//Depart completed
-			this.sendRequest(this.leaderSocket, "donedepart" + "," + this.mainSocket + "," + "DEPART Answer from: "+ this.id);
+			this.sendRequest(this.leaderSocket, "donedepart");
+			//this.sendRequest(this.leaderSocket, "donedepart" + "," + "DEPART Answer from: "+ this.id);
 			
 		}
 		else //forward the request
@@ -262,7 +303,7 @@ public class Node
 			//else if a Node requested the insert, just send "OK" (done in ClientThread)
 			if (sender.compareTo("Main")==0 && (this.strategy.equals("lazy")||(this.repSize==1)))
 			{
-				this.sendRequest(startsocket, "doneinsert" + "," + this.mainSocket + ","+ "INSERT Answer from: "+ this.id);
+				this.sendRequest(startsocket, "doneinsert" + ","+ "INSERT Answer from: "+ this.id);
 			}
 			// if we have replicas
 			if (this.repSize >1) 
@@ -298,7 +339,7 @@ public class Node
 				if (this.strategy.equals("lazy") || this.repSize==1)
 				{
 
-					this.sendRequest(startsocket, "donedelete" + "," + this.mainSocket + ","+ "DELETE Answer from: "+ this.id); // inform the starting node for the delete
+					this.sendRequest(startsocket, "donedelete" + ","+ "DELETE Answer from: "+ this.id); // inform the starting node for the delete
 				}
 				// if we have replicas
 				if (this.repSize >1) 
@@ -321,12 +362,12 @@ public class Node
 			if (this.next==startsocket)
 			{
 				msg1= this.printItems();
-				this.sendRequest(startsocket, "donequery"+ "," + this.mainSocket + "," + query_answer+msg1);
+				this.sendRequest(startsocket, "donequery" + "," + query_answer+msg1);
 			}
 			else
 			{
 				msg1= this.printItems();
-				this.sendRequest(this.next, "query," + "*" + "," + startsocket + "," + query_answer+msg1);
+				this.sendRequest(this.next, "query" + "," + "*" + "," + startsocket + "," + query_answer+msg1);
 			}
 		}
 		else
@@ -362,33 +403,35 @@ public class Node
 			if (checkFirstKRlazy||checkOtherKRlazy)
 			{
 				//if an entry <key', value'> where key=key' already exists we have to return it
+				System.out.println("Files check");
 				Pair<String, Integer> queryPair;
 				queryPair=this.contains(fileList,hashedkey); // removePair might be null if the file does not exist
 				if (queryPair != null)
 				{
-					String msg1= queryPair.getKey()+ " "  + queryPair.getValue()+ " " + "| QUERY Answer from: " +this.id;
-					this.sendRequest(startsocket, "donequery"+ "," + this.mainSocket + "," + msg1 );
+					String msg1= queryPair.getKey()+ " "  + queryPair.getValue()+ " " + "|QUERY Answer from: " +this.id;
+					this.sendRequest(startsocket, "donequery" + "," + " " + msg1 );
 				}
 				else
 				{
-					this.sendRequest(startsocket, "donequery" + "," + this.mainSocket + ",File does not exist|QUERY Answer from: " +this.id );
+					this.sendRequest(startsocket, "donequery" + "," + " File does not exist|QUERY Answer from: " +this.id );
 				}			
 			}
 			else 
 			{
 				if (checkReplicaFirstLinear || checkReplicaOtherLinear|| checkReplicaFirstLazy || checkReplicaOtherLazy)
 				{
+					System.out.println("Replica check "+ hasReplicaOfFirst + (hashedkey.compareTo(this.keyRange[1])<=0 || hashedkey.compareTo(this.keyRangeTail[1])>0));
 					//if an entry <key', value'> where key=key' already exists we have to return it
 					Pair<String, Integer> queryPair;
 					queryPair=this.contains(replicaList,hashedkey); // removePair might be null if the file does not exist
 					if (queryPair != null)
 					{
 						String msg1= queryPair.getKey()+ " "  + queryPair.getValue()+ " " + "|QUERY Answer from: " +this.id;
-						this.sendRequest(startsocket, "donequery,"  + this.mainSocket + "," +msg1 );
+						this.sendRequest(startsocket, "donequery" + ","  + " " +msg1 );
 					}
 					else
 					{
-						this.sendRequest(startsocket, "donequery" + "," + this.mainSocket + ",File does not exist|QUERY Answer from: " +this.id );
+						this.sendRequest(startsocket, "donequery" + "," + " File does not exist|QUERY Answer from: " +this.id );
 					}		
 				}
 				else //forward the request
@@ -399,10 +442,11 @@ public class Node
 		}
 	}
 	
+	//Methods that are needed for replication, secondary methods
     /**
 	* Node inserts a file (key,value) from its replica list, forwards the
 	* request, if more replicas need to be entered and acts according
-	* to its strategy (Lazy or Linear)
+	* to its strategy (Lazy or Linear).
 	* @throws NoSuchAlgorithmException
 	* @throws UnknownHostException
 	* @throws IOException
@@ -430,7 +474,7 @@ public class Node
 		{
 			if(sender.equals("Main")&& this.strategy.equals("linear"))
 			{//last replica node must reply to the StartingNode
-				this.sendRequest(startsocket, "doneinsert" + "," + this.mainSocket + ","+ "INSERTREPLICA Answer from: "+ this.id);
+				this.sendRequest(startsocket, "doneinsert" + ","+ "INSERTREPLICA Answer from: "+ this.id);
 			}
 			else if (sender.equals("Node")) //must put ELSE with "Node", allios kanei kyklo synexeia to arxeio gia depart/join
 			{
@@ -466,7 +510,7 @@ public class Node
 		{
 			if(this.strategy.equals("linear"))
 			{//last replica node must reply to the StartingNode
-				this.sendRequest(startsocket, "donedelete" + "," + this.mainSocket + ","+ "DELETEREPLICA Answer from: "+ this.id);
+				this.sendRequest(startsocket, "donedelete" + ","+ "DELETEREPLICA Answer from: "+ this.id);
 			}						
 		}
 		else 

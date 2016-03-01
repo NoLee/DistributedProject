@@ -11,11 +11,10 @@ public class ClientThread extends Thread
 	protected Node ThisNode;
 	ReadWriteLock lock ;
 	
-	public ClientThread(Socket clientSocket, Node currentNode,ReadWriteLock locket) 
+	public ClientThread(Socket clientSocket, Node currentNode) //,ReadWriteLock locket) 
 	{
         this.socket = clientSocket;
         this.ThisNode= currentNode;
-        lock = locket;
     }
 	
 	public void run() 
@@ -53,7 +52,7 @@ public class ClientThread extends Thread
 				{
 					out.println("OK");
 					//inform main
-					this.ThisNode.sendRequest(Integer.parseInt(parts1[1]), "doneinsert" + "," + parts1[2] );					
+					this.ThisNode.sendRequest(this.ThisNode.getmainSocket(), "doneinsert" + "," + parts1[1] );					
 					break;
 				}
 				else if (parts1[0].equals("query"))
@@ -67,7 +66,7 @@ public class ClientThread extends Thread
 				{
 					out.println("OK");
 					//inform main
-					this.ThisNode.sendRequest(Integer.parseInt(parts1[1]), "donequery" + "," + parts1[2] );					
+					this.ThisNode.sendRequest(this.ThisNode.getmainSocket(), "donequery" + "," + parts1[1] );					
 					break;
 				}
 				else if (parts1[0].equals("delete"))
@@ -92,7 +91,7 @@ public class ClientThread extends Thread
 				{
 					out.println("OK");
 					//inform main
-					this.ThisNode.sendRequest(Integer.parseInt(parts1[1]), "donedelete" + "," + parts1[2] );					
+					this.ThisNode.sendRequest(this.ThisNode.getmainSocket(), "donedelete" + "," + parts1[1] );					
 					break;
 				}
 				else if (parts1[0].equals("join"))
@@ -105,7 +104,8 @@ public class ClientThread extends Thread
 				else if (parts1[0].equals("donejoin"))
 				{
 					out.println("OK");
-					this.ThisNode.sendRequest(Integer.parseInt(parts1[1]), "donejoin" + "," + parts1[2]);
+					this.ThisNode.sendRequest(this.ThisNode.getmainSocket(), "donejoin");
+					//this.ThisNode.sendRequest(this.ThisNode.getmainSocket(), "donejoin" + "," + parts1[1]);
 					break;
 				}
 				else if (parts1[0].equals("fixreplicas"))
@@ -118,34 +118,31 @@ public class ClientThread extends Thread
 				{
 					out.println("OK");
 					this.ThisNode.depart(parts1[1]);
-					
 					break;
 				}
 				else if (parts1[0].equals("donedepart"))
 				{
 					out.println("OK");
-					this.ThisNode.sendRequest(Integer.parseInt(parts1[1]), "donedepart" + "," + parts1[2]);;
-					
+					this.ThisNode.sendRequest(this.ThisNode.getmainSocket(), "donedepart");
+					//this.ThisNode.sendRequest(this.ThisNode.getmainSocket(), "donedepart" + "," + parts1[1]);
 					break;
 				}
-				// ------ BELOW HERE WE USE NODE ATTRIBUTES SO WE CANT MAKE THEM PRIVATE! ------
 				else if (parts1[0].equals("update"))
 				{					
 					if (!parts1[1].equals("NULL"))
 					{
-						this.ThisNode.next=Integer.parseInt(parts1[1]);
+						this.ThisNode.setNext(Integer.parseInt(parts1[1]));
 					}
 					if (!parts1[2].equals("NULL"))
 					{
-						this.ThisNode.previous=Integer.parseInt(parts1[2]);
+						this.ThisNode.setPrevious(Integer.parseInt(parts1[2]));
 					}
 					out.println("OK");
-					socket.close();
 					break;
 				}
 				else if (parts1[0].equals("ID"))
 				{
-					out.println("ID," + this.ThisNode.id);					
+					out.println("ID"+ "," + this.ThisNode.getID());					
 					break;
 				}
 				else if (parts1[0].equals("findkeyrange")) //find MY keyRange
@@ -157,42 +154,48 @@ public class ClientThread extends Thread
 				else if (parts1[0].equals("TellKR"))
 				{
 					int Kay = Integer.parseInt(parts1[1]);
+					String[] keyRange=this.ThisNode.getkeyRange();
 					
 					if ( Kay == 1)
 					{
-						out.println("HeadKR,"+this.ThisNode.keyRange[0] + ","+this.ThisNode.keyRange[1]);
+						out.println("HeadKR" + "," + keyRange[0] + "," + keyRange[1]);
 					}
 					else
 					{
-						String msg=this.ThisNode.sendRequest(this.ThisNode.previous,"TellKR," + (Kay-1));
-						out.println("HeadKR,"+msg);
+						String msg=this.ThisNode.sendRequest(this.ThisNode.getPrevious(),"TellKR"+ "," + (Kay-1));
+						out.println("HeadKR" + "," + msg);
 					}
 				}
+				// THIS IS FOR TESTING ONLY, MAYBE REMOVE IT?
 				else if (parts1[0].equals("PrintKR"))
 				{
-					System.out.println("KR : "+this.ThisNode.keyRange[0] +" "+ this.ThisNode.keyRange[1]);
-					System.out.println("TKR: "+this.ThisNode.keyRangeTail[0] +" "+ this.ThisNode.keyRangeTail[1]);
+					String[] keyRange=this.ThisNode.getkeyRange();
+					System.out.println("KR : "+ keyRange[0] +" "+ keyRange[1]);
+					System.out.println("TKR: "+this.ThisNode.keyRangeTail[0] +" "+ this.ThisNode.keyRangeTail[1]); 
 					out.println("OK");					
 					break;
 				}
 				if (parts1[0].equals("print"))
 				{
+					int startnode = Integer.parseInt(parts1[1]);
 					out.println("OK");
-					if (this.ThisNode.next==this.ThisNode.leaderSocket)
+					if (this.ThisNode.getNext()==startnode)
 					{
+						System.out.println("Last!");
 						//if we reached the last node (started from leader node)
-						this.ThisNode.sendRequest(this.ThisNode.next,"doneprint"+","+parts1[1]+"->"+this.ThisNode.id);	//send the full list to the leader
+						this.ThisNode.sendRequest(startnode,"doneprint" + "," +parts1[2]+"->"+this.ThisNode.getID());	//send the full list to the leader
 					}
 					else
 					{
+						System.out.println("More..");
 						//more nodes need to be written on the list
-						this.ThisNode.sendRequest(this.ThisNode.next,"print"+","+parts1[1]+"->"+this.ThisNode.id);	
+						this.ThisNode.sendRequest(this.ThisNode.getNext(),"print"+ "," + startnode + "," +parts1[2]+"->"+this.ThisNode.getID());	
 					}
 					break;
 				}
 				if (parts1[0].equals("doneprint"))
 				{
-					this.ThisNode.sendRequest(this.ThisNode.mainSocket,"doneprint"+","+parts1[1]);
+					this.ThisNode.sendRequest(this.ThisNode.getmainSocket(),"doneprint"+","+parts1[1]);
 				}
 				else					
 					break;
@@ -212,7 +215,6 @@ public class ClientThread extends Thread
 			e.printStackTrace();
 		}
 	}		
-
 }
 	
 

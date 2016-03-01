@@ -7,10 +7,10 @@ import java.util.*;
 	
 public class Main {
 	
-	public int socketNum;
-	public int leaderSocket;
-	public int repSize=3;
-	public String strategy="linear"; //"linear" or "lazy"
+	private int socketNum;
+	private int leaderSocket;
+	private int repSize=5;
+	private String strategy="lazy"; //"linear" or "lazy"
 	private ArrayList<Triple<Process, Integer,Integer>> proc; //list with the PID,ID,Socket for each process
 	
 	public Main(int startsocket)
@@ -69,7 +69,7 @@ public class Main {
             }
             else if (parts[0].equals("donejoin"))
             {
-            	System.out.println(parts[1]);
+            	//System.out.println(parts[1]);
             	break;
             }
             else if (parts[0].equals("doneinsert"))
@@ -84,7 +84,7 @@ public class Main {
             }
             else if (parts[0].equals("donedepart"))
             {
-            	System.out.println(parts[1]);
+            	//System.out.println(parts[1]);
             	break;
             }
             else if (parts[0].equals("doneprint"))
@@ -106,7 +106,7 @@ public class Main {
 		BufferedReader in = new BufferedReader(new InputStreamReader(kkSocket.getInputStream()));
 		
 		String confirm;
-		out.println("print,List:");
+		out.println("print" + "," + this.leaderSocket + "," + "List:");
 		while ((confirm = in.readLine()) != null) 
 	    {
 			//request received from node

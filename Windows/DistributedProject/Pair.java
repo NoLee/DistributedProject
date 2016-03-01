@@ -13,5 +13,4 @@ public class Pair<Key,Value> {
 
 	  public Key getKey() { return key; }
 	  public Value getValue() { return value; }
-
 	}
