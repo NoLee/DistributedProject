@@ -3,15 +3,13 @@ package DistributedProject;
 import java.io.*;
 import java.net.*;
 import java.security.NoSuchAlgorithmException;
-import java.util.concurrent.locks.ReadWriteLock;
 
 public class ClientThread extends Thread
 {
 	protected Socket socket;
 	protected Node ThisNode;
-	ReadWriteLock lock ;
 	
-	public ClientThread(Socket clientSocket, Node currentNode) //,ReadWriteLock locket) 
+	public ClientThread(Socket clientSocket, Node currentNode)
 	{
         this.socket = clientSocket;
         this.ThisNode= currentNode;
@@ -57,7 +55,6 @@ public class ClientThread extends Thread
 				}
 				else if (parts1[0].equals("query"))
 				{
-					//send ACK
 					out.println("OK");
 					this.ThisNode.query(parts1[1],Integer.parseInt(parts1[2]),parts1[3]);					
 					break;
@@ -145,7 +142,7 @@ public class ClientThread extends Thread
 					out.println("ID"+ "," + this.ThisNode.getID());					
 					break;
 				}
-				else if (parts1[0].equals("findkeyrange")) //find MY keyRange
+				else if (parts1[0].equals("findkeyrange")) 
 				{					
 					this.ThisNode.findkeyRange(Integer.parseInt(parts1[1]),Integer.parseInt(parts1[2]));
 					out.println("OK");					
@@ -181,13 +178,11 @@ public class ClientThread extends Thread
 					out.println("OK");
 					if (this.ThisNode.getNext()==startnode)
 					{
-						System.out.println("Last!");
 						//if we reached the last node (started from leader node)
 						this.ThisNode.sendRequest(startnode,"doneprint" + "," +parts1[2]+"->"+this.ThisNode.getID());	//send the full list to the leader
 					}
 					else
 					{
-						System.out.println("More..");
 						//more nodes need to be written on the list
 						this.ThisNode.sendRequest(this.ThisNode.getNext(),"print"+ "," + startnode + "," +parts1[2]+"->"+this.ThisNode.getID());	
 					}
@@ -205,13 +200,10 @@ public class ClientThread extends Thread
 
 		catch (IOException e) 
 		{
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		} catch (NumberFormatException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		} catch (NoSuchAlgorithmException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 	}		

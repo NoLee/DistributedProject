@@ -9,8 +9,8 @@ public class Main {
 	
 	private int socketNum;
 	private int leaderSocket;
-	private int repSize=5;
-	private String strategy="lazy"; //"linear" or "lazy"
+	private int repSize=3;
+	private String strategy="linear"; //"linear" or "lazy"
 	private ArrayList<Triple<Process, Integer,Integer>> proc; //list with the PID,ID,Socket for each process
 	
 	public Main(int startsocket)
@@ -115,6 +115,7 @@ public class Main {
                 break;
             }
         }
+		
 		kkSocket.close();
 		
 		this.waitResponse();	
