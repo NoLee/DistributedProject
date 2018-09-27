@@ -3,7 +3,7 @@ Authors:
 Manolis Pentarakis,
 George Chatzikyriakos
 
-In this project we developed a DHT (Distributed hash table), a simplified version of Chord.
+In this project we developed a DHT (Distributed hash table), a simplified version of Chord, using JAVA.
 The core functions implemented in this DHT are:
 
 -initial creation of the network keys and nodes
