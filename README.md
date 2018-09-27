@@ -1,7 +1,5 @@
 # Project for Distributed Systems at National Technical University of Athens, 2016
-##Authors:
-##Manolis Pentarakis,
-##George Chatzikyriakos
+### Authors: Manolis Pentarakis, George Chatzikyriakos
 
 In this project we developed a DHT (Distributed hash table), a simplified version of Chord, using JAVA.
 The core functions implemented in this DHT are:
